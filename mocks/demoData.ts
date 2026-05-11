@@ -104,6 +104,10 @@ export function updateDemoReservation(updatedReservation: Reservation): Reservat
   return structuredClone(updatedReservation);
 }
 
+export function deleteDemoReservation(reservationId: string): void {
+  demoReservations = demoReservations.filter((item) => item.id !== reservationId);
+}
+
 export function createDemoManualReservation(input: {
   roomId: string;
   checkIn: string;

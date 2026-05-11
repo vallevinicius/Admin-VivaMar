@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  CircleAlert,
   LogOut,
   Mail,
   MoonStar,
@@ -16,6 +17,7 @@ import {
   Receipt,
   ScrollText,
   Sparkles,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
@@ -173,6 +175,8 @@ export function UnifiedCalendar() {
   const [draft, setDraft] = useState<ReservationDraft | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [isUpdatingReservation, setIsUpdatingReservation] = useState(false);
+  const [isDeletingReservation, setIsDeletingReservation] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [daysVisible, setDaysVisible] = useState<number>(DEFAULT_DAYS_VISIBLE);
   const [gridStart, setGridStart] = useState<Date>(getToday());
   useEffect(() => {
@@ -306,6 +310,7 @@ export function UnifiedCalendar() {
     setSelectedReservationId(null);
     setDraft(null);
     setDrawerError(null);
+    setIsDeleteConfirmOpen(false);
   }
 
   async function handleManualEntrySubmit(event: FormEvent<HTMLFormElement>) {
@@ -443,6 +448,53 @@ export function UnifiedCalendar() {
       );
     } finally {
       setIsUpdatingReservation(false);
+    }
+  }
+
+  function openDeleteConfirm() {
+    setIsDeleteConfirmOpen(true);
+  }
+
+  function closeDeleteConfirm() {
+    if (!isDeletingReservation) {
+      setIsDeleteConfirmOpen(false);
+    }
+  }
+
+  async function handleReservationDelete() {
+    if (!selectedReservation) {
+      return;
+    }
+
+    setDrawerError(null);
+    setIsDeletingReservation(true);
+
+    try {
+      const deleteResponse = await fetch("/api/tenant/reservations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId: selectedReservation.id }),
+      });
+
+      if (!deleteResponse.ok) {
+        const payload = (await deleteResponse.json()) as { message?: string };
+        throw new Error(payload.message || "Falha ao excluir reserva.");
+      }
+
+      setReservations((current) =>
+        current.filter((reservation) => reservation.id !== selectedReservation.id),
+      );
+      setIsDeleteConfirmOpen(false);
+      closeReservationDrawer();
+      showToast("Reserva excluída com sucesso.");
+    } catch (error) {
+      setDrawerError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir a reserva.",
+      );
+    } finally {
+      setIsDeletingReservation(false);
     }
   }
 
@@ -1052,22 +1104,32 @@ export function UnifiedCalendar() {
                   <p className="text-sm text-rose-300">{drawerError}</p>
                 ) : null}
 
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/60 px-4 py-2 text-xs uppercase tracking-[0.28em] text-slate-400">
                     <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                     Moderação inline
                   </div>
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                  <div className="flex w-full flex-wrap justify-end gap-3 sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={openDeleteConfirm}
+                      disabled={isDeletingReservation || isUpdatingReservation}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-5 py-3 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {isDeletingReservation ? "Excluindo..." : "Excluir reserva"}
+                    </button>
                     <button
                       type="button"
                       onClick={closeReservationDrawer}
+                      disabled={isDeletingReservation}
                       className="rounded-2xl border border-white/10 bg-slate-950/60 px-5 py-3 text-sm font-medium text-slate-100"
                     >
                       Fechar
                     </button>
                     <button
                       type="submit"
-                      disabled={isUpdatingReservation}
+                      disabled={isUpdatingReservation || isDeletingReservation}
                       className="rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-950/30 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {isUpdatingReservation
@@ -1078,6 +1140,62 @@ export function UnifiedCalendar() {
                 </div>
               </form>
             </motion.aside>
+
+            <AnimatePresence>
+              {isDeleteConfirmOpen ? (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[60] bg-slate-950/70 backdrop-blur-sm"
+                    onClick={closeDeleteConfirm}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                    className="fixed inset-0 z-[61] flex items-center justify-center p-4"
+                  >
+                    <div className="w-full max-w-md rounded-[28px] border border-rose-400/30 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-3 text-rose-300">
+                          <CircleAlert className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-semibold text-white">
+                            Excluir reserva?
+                          </h4>
+                          <p className="mt-2 text-sm leading-6 text-slate-300">
+                            Esta ação remove a reserva de forma permanente do calendário e não pode ser desfeita.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={closeDeleteConfirm}
+                          disabled={isDeletingReservation}
+                          className="rounded-2xl border border-white/10 bg-slate-950/60 px-5 py-3 text-sm font-medium text-slate-100 disabled:opacity-60"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleReservationDelete}
+                          disabled={isDeletingReservation}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-950/40 disabled:opacity-70"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {isDeletingReservation ? "Excluindo..." : "Confirmar exclusão"}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              ) : null}
+            </AnimatePresence>
           </>
         ) : null}
       </AnimatePresence>

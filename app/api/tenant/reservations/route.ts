@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedSession } from "@/lib/auth";
 import {
+  deleteReservation,
   getTenantReservations,
   updateReservation,
 } from "@/services/tenantService";
 import type { Reservation } from "@/types/channex";
 
+function resolveTenantId(session: Awaited<ReturnType<typeof getAuthenticatedSession>>) {
+  // O calendário atualmente opera com tenant fixo 1.
+  // Mantemos esse valor para evitar inconsistência entre listar/editar/excluir.
+  return session?.tenantId ?? 1;
+}
+
 export async function PATCH(request: Request) {
   const session = await getAuthenticatedSession();
-
-  if (!session) {
-    return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
-  }
+  const tenantId = resolveTenantId(session);
 
   const body = (await request.json()) as { reservation?: Reservation };
 
@@ -20,10 +24,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const reservation = await updateReservation(
-      session.tenantId,
-      body.reservation,
-    );
+    const reservation = await updateReservation(tenantId, body.reservation);
     return NextResponse.json({ reservation });
   } catch (error) {
     return NextResponse.json(
@@ -50,5 +51,32 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error("Erro ao buscar reservas do SaaS:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const session = await getAuthenticatedSession();
+  const tenantId = resolveTenantId(session);
+
+  const body = (await request.json()) as { reservationId?: string };
+  const reservationId = body.reservationId?.trim();
+
+  if (!reservationId) {
+    return NextResponse.json({ message: "ID da reserva é obrigatório." }, { status: 400 });
+  }
+
+  try {
+    await deleteReservation(tenantId, reservationId);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : "Falha ao excluir reserva.",
+      },
+      { status: 400 },
+    );
   }
 }

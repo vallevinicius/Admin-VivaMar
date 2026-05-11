@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import {
   DEMO_TENANT_ID,
   createDemoExpense,
+  deleteDemoReservation,
   getDemoExpenses,
   getDemoReservations,
   getDemoRooms,
@@ -165,6 +166,33 @@ export async function updateReservation(
   });
 
   return mapReservation(reservation, room.localRoomId);
+}
+
+export async function deleteReservation(
+  tenantId: number,
+  reservationId: string,
+): Promise<void> {
+  if (tenantId === DEMO_TENANT_ID) {
+    deleteDemoReservation(reservationId);
+    return;
+  }
+
+  const { Reservation } = await getDb();
+  const parsedId = Number(reservationId);
+
+  const deletedCount = await Reservation.destroy({
+    where: {
+      tenantId,
+      [Op.or]: [
+        { channexReservationId: reservationId },
+        ...(Number.isInteger(parsedId) ? [{ id: parsedId }] : []),
+      ],
+    },
+  });
+
+  if (deletedCount === 0) {
+    throw new Error("Reserva não encontrada para este tenant.");
+  }
 }
 
 export async function getExpenses(tenantId: number): Promise<Expense[]> {
