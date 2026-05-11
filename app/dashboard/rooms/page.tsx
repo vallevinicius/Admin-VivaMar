@@ -4,7 +4,6 @@ import { useState, useEffect, type FormEvent } from 'react';
 
 import { BedDouble, Settings2, Plus, Trash2, CircleDollarSign, Save, X, Edit2 } from 'lucide-react';
 
-import { ROOM_SNAPSHOTS_MOCK } from '@/mocks/dashboard';
 import { useToast } from '@/components/toast-provider';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -29,9 +28,6 @@ type RoomData = {
   status: 'active' | 'maintenance';
   amenities?: string;
 };
-
-const ROOM_SNAPSHOTS: RoomSnapshot[] = ROOM_SNAPSHOTS_MOCK.map((item) => ({ ...item }));
-
 
 function roomStatusBadge(status: RoomOperationalStatus) {
   if (status === 'vacant') {
@@ -75,7 +71,8 @@ function roomStatusLabel(status: RoomOperationalStatus) {
 
 export default function RoomsPage() {
   const { showToast } = useToast();
-  const [snapshots, setSnapshots] = useState<RoomSnapshot[]>(ROOM_SNAPSHOTS);
+  const [snapshots, setSnapshots] = useState<RoomSnapshot[]>([]);
+  const [loadingSnapshots, setLoadingSnapshots] = useState(true);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -268,7 +265,22 @@ export default function RoomsPage() {
 
   useEffect(() => {
     fetchRooms();
+    fetchSnapshots();
   }, []);
+
+  async function fetchSnapshots() {
+    setLoadingSnapshots(true);
+    try {
+      const res = await fetch('/api/tenant/rooms/panel');
+      const data = await res.json();
+      if (data.snapshots) setSnapshots(data.snapshots);
+    } catch (error) {
+      console.error('Erro ao carregar painel de quartos:', error);
+      showToast('Erro ao carregar painel de quartos');
+    } finally {
+      setLoadingSnapshots(false);
+    }
+  }
 
   async function fetchRooms() {
     setLoading(true);
@@ -284,9 +296,18 @@ export default function RoomsPage() {
     }
   }
 
-  function updateStatus(id: string, status: RoomOperationalStatus) {
+  async function updateStatus(id: string, status: RoomOperationalStatus) {
     const now = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date());
     setSnapshots((prev) => prev.map((room) => (room.id === id ? { ...room, status, updatedAt: now } : room)));
+    try {
+      await fetch(`/api/tenant/rooms/panel/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    } catch {
+      showToast('Erro ao salvar status');
+    }
   }
 
   const handlePriceChange = (roomId: string, value: string) => {
@@ -499,6 +520,13 @@ export default function RoomsPage() {
 
       {/* OPERATIONAL STATUS */}
       <section className="grid gap-3 lg:grid-cols-2">
+        {loadingSnapshots ? (
+          <p className="col-span-2 text-slate-400">Carregando quartos...</p>
+        ) : snapshots.length === 0 ? (
+          <p className="col-span-2 text-sm text-slate-400 text-center py-6 border border-dashed border-white/10 rounded-2xl">
+            Nenhum quarto cadastrado. Crie um novo na seção abaixo.
+          </p>
+        ) : null}
         {snapshots.map((room) => (
           <article key={room.id} className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
             <div className="flex items-start justify-between gap-3">

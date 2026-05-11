@@ -44,7 +44,7 @@ export function DashboardSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="rounded-[28px] border border-white/10 bg-slate-900/85 p-5 shadow-2xl shadow-slate-950/30">
+    <aside className="h-fit self-start rounded-[28px] border border-white/10 bg-slate-900/85 p-5 shadow-2xl shadow-slate-950/30">
       <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">

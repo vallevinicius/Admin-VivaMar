@@ -2,6 +2,7 @@ import { Sequelize } from "sequelize";
 import { Expense } from "@/models/Expense";
 import { Reservation } from "@/models/Reservation";
 import { Room } from "@/models/Room";
+import { RoomUnitStatus } from "@/models/RoomUnitStatus";
 import { Tenant } from "@/models/Tenant";
 import { User } from "@/models/User";
 import { Coupon } from "@/models/Coupon";
@@ -24,6 +25,7 @@ export function initializeModels(sequelize: Sequelize) {
   Tenant.initialize(sequelize);
   User.initialize(sequelize);
   Room.initialize(sequelize);
+  RoomUnitStatus.initialize(sequelize);
   Reservation.initialize(sequelize);
   Expense.initialize(sequelize);
   Coupon.initialize(sequelize);
@@ -57,11 +59,15 @@ export function initializeModels(sequelize: Sequelize) {
   });
   Reservation.associate();
 
+  Room.hasMany(RoomUnitStatus, { foreignKey: "roomId", as: "unitStatuses" });
+  RoomUnitStatus.belongsTo(Room, { foreignKey: "roomId", as: "room" });
+
   return {
     sequelize,
     Tenant,
     User,
     Room,
+    RoomUnitStatus,
     Reservation,
     Expense,
     Coupon,
