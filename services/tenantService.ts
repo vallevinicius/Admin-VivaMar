@@ -121,6 +121,24 @@ export async function getReservations(
   }
 }
 
+export async function getRooms(tenantId: number): Promise<Room[]> {
+  if (tenantId === DEMO_TENANT_ID) {
+    return getDemoRooms();
+  }
+
+  try {
+    const { Room } = await getDb();
+    const rooms = await Room.findAll({
+      where: { tenantId },
+      order: [["name", "ASC"]],
+    });
+
+    return rooms.map((room) => mapRoom(room));
+  } catch {
+    return getDemoRooms();
+  }
+}
+
 export async function updateReservation(
   tenantId: number,
   updatedReservation: Reservation,

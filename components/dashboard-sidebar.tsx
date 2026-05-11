@@ -7,6 +7,7 @@ import {
   BadgePercent,
   BedDouble,
   CalendarRange,
+  CalendarPlus2,
   ClipboardCheck,
   History,
   Landmark,
@@ -25,6 +26,7 @@ type NavItem = {
 const ICONS: Record<string, LucideIcon> = {
   "/dashboard/calendar": CalendarRange,
   "/dashboard/promotions": BadgePercent,
+  "/dashboard/reservations": CalendarPlus2,
   "/dashboard/check": ClipboardCheck,
   "/dashboard/rooms": BedDouble,
   "/dashboard/team": UsersRound,

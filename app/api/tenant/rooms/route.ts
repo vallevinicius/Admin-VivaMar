@@ -1,5 +1,18 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getRooms } from "@/services/tenantService";
+
+export async function GET() {
+  try {
+    const tenantId = 1;
+    const rooms = await getRooms(tenantId);
+
+    return NextResponse.json(rooms, { status: 200 });
+  } catch (error: any) {
+    console.error("Erro ao buscar quartos:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
 function slugifyRoomName(name: string) {
   return name

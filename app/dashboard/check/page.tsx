@@ -1,11 +1,33 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { ClipboardCheck, DoorOpen, Search, UserRoundPlus } from 'lucide-react';
 
-import { INITIAL_STAYS_MOCK } from '@/mocks/dashboard';
-
 type StayStatus = 'reserved' | 'checked_in' | 'checked_out';
+
+type RoomSummary = {
+  localRoomId: string;
+  name: string;
+};
+
+type ReservationApiItem = {
+  id: string;
+  roomId: string;
+  checkIn: string;
+  checkOut: string;
+  status: 'confirmed' | 'pending' | 'cancelled' | 'blocked';
+  channelReference: string;
+  amount: number;
+  currency: string;
+  notes: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  room?: RoomSummary;
+};
 
 type Stay = {
   id: string;
@@ -28,29 +50,7 @@ function toLocalDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function getDateByOffset(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return toLocalDateKey(date);
-}
-
-const TODAY_KEY = getDateByOffset(0);
-
-const INITIAL_STAYS: Stay[] = INITIAL_STAYS_MOCK.map((item) => ({
-  id: item.id,
-  guestName: item.guestName,
-  document: item.document,
-  room: item.room,
-  peopleCount: item.peopleCount,
-  checkInDate: getDateByOffset(item.checkInOffset),
-  checkOutDate: getDateByOffset(item.checkOutOffset),
-  status: item.status,
-  notes: item.notes,
-  checkedInAt: item.checkedInOffset !== undefined && item.checkedInTime ? `${getDateByOffset(item.checkedInOffset)}T${item.checkedInTime}` : undefined,
-  checkedOutAt:
-    item.checkedOutOffset !== undefined && item.checkedOutTime ? `${getDateByOffset(item.checkedOutOffset)}T${item.checkedOutTime}` : undefined,
-}));
-
+const TODAY_KEY = toLocalDateKey(new Date());
 
 function formatShortDate(value: string) {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -96,20 +96,94 @@ function statusLabel(status: StayStatus) {
   return 'Reserva confirmada';
 }
 
+function deriveStayStatus(reservation: ReservationApiItem): StayStatus {
+  if (reservation.status === 'cancelled') {
+    return 'checked_out';
+  }
+
+  const start = `${reservation.checkIn.slice(0, 10)}`;
+  const end = `${reservation.checkOut.slice(0, 10)}`;
+
+  if (start <= TODAY_KEY && TODAY_KEY < end) {
+    return 'checked_in';
+  }
+
+  if (TODAY_KEY >= end) {
+    return 'checked_out';
+  }
+
+  return 'reserved';
+}
+
+function mapReservationToStay(reservation: ReservationApiItem, roomNameById: Map<string, string>): Stay {
+  return {
+    id: reservation.id,
+    guestName: reservation.customer?.name?.trim() || 'Hóspede sem nome',
+    document: reservation.channelReference || reservation.customer?.phone || 'Não informado',
+    room: roomNameById.get(reservation.roomId) ?? reservation.room?.name ?? reservation.roomId,
+    peopleCount: 1,
+    checkInDate: reservation.checkIn.slice(0, 10),
+    checkOutDate: reservation.checkOut.slice(0, 10),
+    status: deriveStayStatus(reservation),
+    notes: reservation.notes || 'Reserva registrada no banco de dados.',
+  };
+}
+
 export default function CheckPage() {
-  const [stays, setStays] = useState<Stay[]>(INITIAL_STAYS);
+  const [stays, setStays] = useState<Stay[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | StayStatus>('all');
   const [logs, setLogs] = useState<string[]>([]);
-  const [form, setForm] = useState({
-    guestName: '',
-    document: '',
-    room: '',
-    peopleCount: '1',
-    checkInDate: '',
-    checkOutDate: '',
-    notes: '',
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      setIsLoading(true);
+      setLoadError(null);
+
+      try {
+        const [reservationsResponse, roomsResponse] = await Promise.all([
+          fetch('/api/tenant/reservations'),
+          fetch('/api/tenant/rooms'),
+        ]);
+
+        if (!reservationsResponse.ok) {
+          throw new Error('Falha ao carregar reservas do banco.');
+        }
+
+        if (!roomsResponse.ok) {
+          throw new Error('Falha ao carregar quartos do banco.');
+        }
+
+        const reservations = (await reservationsResponse.json()) as ReservationApiItem[];
+        const rooms = (await roomsResponse.json()) as Array<RoomSummary & { id?: string }>;
+        const roomNameById = new Map(
+          rooms.map((room) => [room.localRoomId ?? room.id ?? '', room.name]),
+        );
+
+        if (!cancelled) {
+          setStays(reservations.map((reservation) => mapReservationToStay(reservation, roomNameById)));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : 'Não foi possível carregar as reservas.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredStays = useMemo(() => {
     return stays.filter((stay) => {
@@ -185,58 +259,26 @@ export default function CheckPage() {
     pushLog(`Checkout finalizado para ${current.guestName} no quarto ${current.room}.`);
   }
 
-  function handleCreateStay(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!form.guestName || !form.room || !form.checkInDate || !form.checkOutDate) {
-      return;
-    }
-
-    if (form.checkOutDate <= form.checkInDate) {
-      pushLog('Período inválido: o checkout deve ser posterior ao check-in.');
-      return;
-    }
-
-    const newStay: Stay = {
-      id: globalThis.crypto?.randomUUID?.() ?? `stay-${Date.now()}`,
-      guestName: form.guestName,
-      document: form.document || 'Não informado',
-      room: form.room,
-      peopleCount: Number(form.peopleCount) || 1,
-      checkInDate: form.checkInDate,
-      checkOutDate: form.checkOutDate,
-      status: 'reserved',
-      notes: form.notes || 'Reserva criada manualmente pela recepção.',
-    };
-
-    setStays((prev) => [newStay, ...prev]);
-    setForm({
-      guestName: '',
-      document: '',
-      room: '',
-      peopleCount: '1',
-      checkInDate: '',
-      checkOutDate: '',
-      notes: '',
-    });
-    pushLog(`Nova reserva mock criada para ${newStay.guestName}.`);
-  }
-
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Recepção Viva Mar</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Check-in e Check-out com mocks operacionais</h2>
+            <h2 className="mt-3 text-3xl font-semibold text-white">Check-in e Check-out com reservas reais</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              Fluxo completo sem banco: cadastro de reserva mock, check-in, check-out, filtros por status e histórico de ações em tempo real.
+              A lista agora vem do banco de dados do tenant. A criação de novas reservas foi movida para a aba Reserva.
             </p>
           </div>
           <div className="rounded-2xl border border-sky-400/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-            Ambiente de treino e validação de processo interno.
+            Operação conectada às reservas existentes.
           </div>
         </div>
+        {loadError ? (
+          <p className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            {loadError}
+          </p>
+        ) : null}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
@@ -253,7 +295,6 @@ export default function CheckPage() {
           <p className="mt-2 text-3xl font-semibold">{totals.departuresDone}</p>
         </article>
       </section>
-
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_minmax(0,0.9fr)]">
         <article className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
@@ -303,7 +344,13 @@ export default function CheckPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10 bg-slate-900/50">
-                  {filteredStays.length ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
+                        Carregando reservas do banco...
+                      </td>
+                    </tr>
+                  ) : filteredStays.length ? (
                     filteredStays.map((stay) => (
                       <tr key={stay.id} className="transition-colors hover:bg-white/[0.03]">
                         <td className="px-4 py-3">
@@ -359,7 +406,7 @@ export default function CheckPage() {
                   ) : (
                     <tr>
                       <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
-                        Nenhuma hospedagem encontrada com o filtro atual.
+                        Nenhuma reserva encontrada com o filtro atual.
                       </td>
                     </tr>
                   )}
@@ -370,74 +417,17 @@ export default function CheckPage() {
         </article>
 
         <article className="space-y-6">
-          <form
-            onSubmit={handleCreateStay}
-            className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20"
-          >
-            <h3 className="text-xl font-semibold text-white">Nova reserva mock</h3>
-            <p className="mt-1 text-sm text-slate-400">Simula uma entrada da recepção sem integração externa.</p>
+          <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
+            <h3 className="text-xl font-semibold text-white">Nova reserva</h3>
+            <p className="mt-1 text-sm text-slate-400">A criação real agora fica na aba Reserva, com gravação no banco.</p>
 
-            <div className="mt-4 grid gap-3">
-              <input
-                value={form.guestName}
-                onChange={(event) => setForm((prev) => ({ ...prev, guestName: event.target.value }))}
-                required
-                placeholder="Nome do hóspede"
-                className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-              />
-              <input
-                value={form.document}
-                onChange={(event) => setForm((prev) => ({ ...prev, document: event.target.value }))}
-                placeholder="Documento"
-                className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-              />
-              <input
-                value={form.room}
-                onChange={(event) => setForm((prev) => ({ ...prev, room: event.target.value }))}
-                required
-                placeholder="Quarto"
-                className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="date"
-                  value={form.checkInDate}
-                  onChange={(event) => setForm((prev) => ({ ...prev, checkInDate: event.target.value }))}
-                  required
-                  className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-                />
-                <input
-                  type="date"
-                  value={form.checkOutDate}
-                  onChange={(event) => setForm((prev) => ({ ...prev, checkOutDate: event.target.value }))}
-                  required
-                  className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-                />
-              </div>
-              <input
-                type="number"
-                min={1}
-                value={form.peopleCount}
-                onChange={(event) => setForm((prev) => ({ ...prev, peopleCount: event.target.value }))}
-                placeholder="Quantidade de hóspedes"
-                className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-              />
-              <textarea
-                value={form.notes}
-                onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-                rows={3}
-                placeholder="Observações"
-                className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
-              />
-            </div>
-
-            <button
-              type="submit"
+            <Link
+              href="/dashboard/reservations"
               className="mt-4 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-900/30"
             >
-              <UserRoundPlus className="h-4 w-4" /> Criar reserva mock
-            </button>
-          </form>
+              <UserRoundPlus className="h-4 w-4" /> Abrir aba Reserva
+            </Link>
+          </section>
 
           <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
             <h3 className="text-xl font-semibold text-white">Log de operação</h3>
@@ -450,7 +440,7 @@ export default function CheckPage() {
                 ))
               ) : (
                 <p className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-slate-400">
-                  Nenhuma ação executada ainda. Faça um check-in, checkout ou crie uma reserva.
+                  Nenhuma ação executada ainda. Faça um check-in, checkout ou abra a aba Reserva.
                 </p>
               )}
             </div>

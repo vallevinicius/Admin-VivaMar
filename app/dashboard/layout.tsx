@@ -14,6 +14,11 @@ const NAV_ITEMS = [
     description: "Gerenciamento de cupons e descontos",
   },
   {
+    href: "/dashboard/reservations",
+    label: "Reserva",
+    description: "Cadastro e registro de reservas",
+  },
+  {
     href: "/dashboard/check",
     label: "Check-in e Check-out",
     description: "Fluxo operacional da recepção",

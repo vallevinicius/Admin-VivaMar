@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedSession } from "@/lib/auth";
+import { createManualReservationAction } from "@/actions/reservation";
 import {
   deleteReservation,
   getTenantReservations,
@@ -47,10 +48,60 @@ export async function GET(request: Request) {
 
     const reservations = await getTenantReservations(tenantId);
 
-    return NextResponse.json(reservations, { status: 200 });
+    return NextResponse.json(reservations.map((reservation) => reservation.toJSON()), { status: 200 });
   } catch (error: any) {
     console.error("Erro ao buscar reservas do SaaS:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as {
+      roomId?: string;
+      checkIn?: string;
+      checkOut?: string;
+      amount?: number;
+      guestName?: string;
+      guestEmail?: string;
+      guestPhone?: string;
+      notes?: string;
+    };
+
+    if (
+      !body.roomId ||
+      !body.checkIn ||
+      !body.checkOut ||
+      !body.guestName ||
+      !body.guestEmail ||
+      !body.guestPhone
+    ) {
+      return NextResponse.json({ message: "Preencha os campos obrigatórios da reserva." }, { status: 400 });
+    }
+
+    const reservation = await createManualReservationAction({
+      roomId: body.roomId,
+      checkIn: body.checkIn,
+      checkOut: body.checkOut,
+      entryType: "manual_reservation",
+      amount: Number(body.amount ?? 0),
+      guestName: body.guestName,
+      guestEmail: body.guestEmail,
+      guestPhone: body.guestPhone,
+      notes: body.notes ?? "",
+    });
+
+    return NextResponse.json({ reservation }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : "Falha ao criar reserva.",
+      },
+      { status: 400 },
+    );
   }
 }
 
