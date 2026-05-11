@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useToast } from "@/components/toast-provider";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   BadgePercent,
   Plus,
@@ -27,6 +28,8 @@ export default function PromotionsPage() {
   const [loading, setLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [couponToDelete, setCouponToDelete] = useState<number | null>(null);
+  const [isDeletingCoupon, setIsDeletingCoupon] = useState(false);
   const [newCoupon, setNewCoupon] = useState({
     code: "",
     discount: "",
@@ -101,16 +104,22 @@ export default function PromotionsPage() {
     }
   };
 
-  const deleteCoupon = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir permanentemente este cupom?"))
-      return;
+  const deleteCoupon = (id: number) => {
+    setCouponToDelete(id);
+  };
 
+  const handleCouponDeleteConfirm = async () => {
+    if (couponToDelete === null) return;
+    setIsDeletingCoupon(true);
     try {
-      await fetch(`/api/tenant/coupons/${id}`, { method: "DELETE" });
+      await fetch(`/api/tenant/coupons/${couponToDelete}`, { method: "DELETE" });
+      setCouponToDelete(null);
       fetchData();
       showToast("Cupom excluído com sucesso.");
     } catch (error) {
       showToast("Erro ao excluir cupom.");
+    } finally {
+      setIsDeletingCoupon(false);
     }
   };
 
@@ -337,6 +346,16 @@ export default function PromotionsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={couponToDelete !== null}
+        title="Excluir cupom?"
+        description="Esta ação exclui o cupom de forma permanente e não pode ser desfeita."
+        confirmLabel="Confirmar exclusão"
+        loading={isDeletingCoupon}
+        onConfirm={handleCouponDeleteConfirm}
+        onCancel={() => { if (!isDeletingCoupon) setCouponToDelete(null); }}
+      />
     </div>
   );
 }

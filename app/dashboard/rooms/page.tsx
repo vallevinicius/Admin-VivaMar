@@ -7,6 +7,7 @@ import { BedDouble, Settings2, Plus, Trash2, CircleDollarSign, Save, X, Edit2 } 
 import { ROOM_SNAPSHOTS_MOCK } from '@/mocks/dashboard';
 import { useToast } from '@/components/toast-provider';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 
 type RoomOperationalStatus = 'vacant' | 'cleaning' | 'awaiting_guest' | 'maintenance' | 'occupied';
 
@@ -84,6 +85,8 @@ export default function RoomsPage() {
   const [amenitiesTab, setAmenitiesTab] = useState<'preset' | 'custom'>('preset');
   const [editAmenitiesTab, setEditAmenitiesTab] = useState<'preset' | 'custom'>('preset');
   const [roomBeingEdited, setRoomBeingEdited] = useState<string | null>(null);
+  const [roomToDelete, setRoomToDelete] = useState<string | null>(null);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [newRoom, setNewRoom] = useState({
     name: '',
     price: '',
@@ -417,16 +420,21 @@ export default function RoomsPage() {
     }
   };
 
-  const deleteRoom = async (roomId: string) => {
-    if (!confirm('Tem certeza que deseja remover este quarto?')) return;
+  const deleteRoom = (roomId: string) => {
+    setRoomToDelete(roomId);
+  };
 
+  const handleRoomDeleteConfirm = async () => {
+    if (!roomToDelete) return;
+    setIsDeletingRoom(true);
     try {
-      const res = await fetch(`/api/tenant/rooms/${roomId}`, {
+      const res = await fetch(`/api/tenant/rooms/${roomToDelete}`, {
         method: 'DELETE',
       });
 
       if (res.ok) {
         showToast('Quarto removido com sucesso!');
+        setRoomToDelete(null);
         fetchRooms();
       } else {
         const error = await res.json();
@@ -434,6 +442,8 @@ export default function RoomsPage() {
       }
     } catch (error) {
       showToast('Erro de conexão ao remover quarto');
+    } finally {
+      setIsDeletingRoom(false);
     }
   };
 
@@ -1056,6 +1066,16 @@ export default function RoomsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={roomToDelete !== null}
+        title="Remover quarto?"
+        description="Esta ação remove o quarto de forma permanente e não pode ser desfeita."
+        confirmLabel="Confirmar remoção"
+        loading={isDeletingRoom}
+        onConfirm={handleRoomDeleteConfirm}
+        onCancel={() => { if (!isDeletingRoom) setRoomToDelete(null); }}
+      />
     </div>
   );
 }
