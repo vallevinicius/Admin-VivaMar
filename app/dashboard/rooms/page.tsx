@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 
 import { BedDouble, Settings2, Plus, Trash2, CircleDollarSign, Save, X, Edit2 } from 'lucide-react';
 
@@ -28,6 +28,19 @@ type RoomData = {
   status: 'active' | 'maintenance';
   amenities?: string;
 };
+
+function getSnapshotUnitNumber(snapshotId: string) {
+  const lastUnderscore = snapshotId.lastIndexOf('_');
+  if (lastUnderscore === -1) return 1;
+
+  const unitNumber = Number.parseInt(snapshotId.slice(lastUnderscore + 1), 10);
+  return Number.isInteger(unitNumber) && unitNumber > 0 ? unitNumber : 1;
+}
+
+function getSnapshotGroupKey(snapshotId: string) {
+  const lastUnderscore = snapshotId.lastIndexOf('_');
+  return lastUnderscore === -1 ? snapshotId : snapshotId.slice(0, lastUnderscore);
+}
 
 function roomStatusBadge(status: RoomOperationalStatus) {
   if (status === 'vacant') {
@@ -72,6 +85,7 @@ function roomStatusLabel(status: RoomOperationalStatus) {
 export default function RoomsPage() {
   const { showToast } = useToast();
   const [snapshots, setSnapshots] = useState<RoomSnapshot[]>([]);
+  const [selectedSnapshotByGroup, setSelectedSnapshotByGroup] = useState<Record<string, string>>({});
   const [loadingSnapshots, setLoadingSnapshots] = useState(true);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -476,6 +490,59 @@ export default function RoomsPage() {
     occupied: snapshots.filter((room) => room.status === 'occupied').length,
   };
 
+  const groupedSnapshots = useMemo(() => {
+    const groups = new Map<
+      string,
+      { key: string; category: string; snapshots: RoomSnapshot[] }
+    >();
+
+    for (const snapshot of snapshots) {
+      const key = getSnapshotGroupKey(snapshot.id);
+      const current = groups.get(key);
+
+      if (current) {
+        current.snapshots.push(snapshot);
+      } else {
+        groups.set(key, {
+          key,
+          category: snapshot.category,
+          snapshots: [snapshot],
+        });
+      }
+    }
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        snapshots: [...group.snapshots].sort(
+          (a, b) => getSnapshotUnitNumber(a.id) - getSnapshotUnitNumber(b.id),
+        ),
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category, 'pt-BR'));
+  }, [snapshots]);
+
+  useEffect(() => {
+    setSelectedSnapshotByGroup((prev) => {
+      const next: Record<string, string> = {};
+      let hasChanges = false;
+
+      for (const group of groupedSnapshots) {
+        const previousSelection = prev[group.key];
+        const isSelectionValid = group.snapshots.some((snapshot) => snapshot.id === previousSelection);
+        next[group.key] = isSelectionValid ? previousSelection : group.snapshots[0]?.id ?? '';
+        if (next[group.key] !== previousSelection) {
+          hasChanges = true;
+        }
+      }
+
+      if (Object.keys(prev).length !== Object.keys(next).length) {
+        hasChanges = true;
+      }
+
+      return hasChanges ? next : prev;
+    });
+  }, [groupedSnapshots]);
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -527,39 +594,66 @@ export default function RoomsPage() {
             Nenhum quarto cadastrado. Crie um novo na seção abaixo.
           </p>
         ) : null}
-        {snapshots.map((room) => (
-          <article key={room.id} className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
+        {groupedSnapshots.map((group) => {
+          const selectedSnapshotId = selectedSnapshotByGroup[group.key] ?? group.snapshots[0]?.id;
+          const selectedSnapshot = group.snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? group.snapshots[0];
+
+          if (!selectedSnapshot) {
+            return null;
+          }
+
+          return (
+            <article key={group.key} className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 <BedDouble className="h-4 w-4 text-sky-300" />
                 <div>
-                  <p className="font-medium text-white">{room.room}</p>
-                  <p className="text-xs text-slate-400">{room.category}</p>
+                  <p className="font-medium text-white">{group.category}</p>
+                  <p className="text-xs text-slate-400">Unidade {getSnapshotUnitNumber(selectedSnapshot.id)}</p>
                 </div>
               </div>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs ${roomStatusBadge(room.status)}`}>
-                {roomStatusLabel(room.status)}
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs ${roomStatusBadge(selectedSnapshot.status)}`}>
+                {roomStatusLabel(selectedSnapshot.status)}
               </span>
             </div>
-            <p className="mt-3 text-sm text-slate-300">{room.note}</p>
+            <p className="mt-3 text-sm text-slate-300">{selectedSnapshot.note}</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <p className="inline-flex items-center gap-1 text-xs text-slate-500">
-                <Settings2 className="h-3.5 w-3.5" /> Atualizado: {room.updatedAt}
+                <Settings2 className="h-3.5 w-3.5" /> Atualizado: {selectedSnapshot.updatedAt}
               </p>
-              <select
-                value={room.status}
-                onChange={(e) => updateStatus(room.id, e.target.value as RoomOperationalStatus)}
-                className="cursor-pointer rounded-xl border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-slate-200 outline-none ring-sky-300 transition focus:ring"
-              >
-                <option value="vacant">Vaga</option>
-                <option value="cleaning">Limpando</option>
-                <option value="awaiting_guest">Esperando hóspede</option>
-                <option value="maintenance">Manutenção</option>
-                <option value="occupied">Ocupado</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedSnapshot.id}
+                  onChange={(e) =>
+                    setSelectedSnapshotByGroup((prev) => ({
+                      ...prev,
+                      [group.key]: e.target.value,
+                    }))
+                  }
+                  className="cursor-pointer rounded-xl border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-slate-200 outline-none ring-sky-300 transition focus:ring"
+                >
+                  {group.snapshots.map((snapshot) => (
+                    <option key={snapshot.id} value={snapshot.id}>
+                      Quarto {getSnapshotUnitNumber(snapshot.id)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={selectedSnapshot.status}
+                  onChange={(e) => updateStatus(selectedSnapshot.id, e.target.value as RoomOperationalStatus)}
+                  className="cursor-pointer rounded-xl border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-slate-200 outline-none ring-sky-300 transition focus:ring"
+                >
+                  <option value="vacant">Vaga</option>
+                  <option value="cleaning">Limpando</option>
+                  <option value="awaiting_guest">Esperando hóspede</option>
+                  <option value="maintenance">Manutenção</option>
+                  <option value="occupied">Ocupado</option>
+                </select>
+              </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </section>
 
       {/* PRICING & INVENTORY MANAGEMENT */}

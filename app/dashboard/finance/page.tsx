@@ -43,9 +43,12 @@ export default async function FinancePage() {
   }
 
   const [reservations, expenses] = await Promise.all([getReservations(session.tenantId), getExpenses(session.tenantId)]);
-  const grossRevenue = reservations
-    .filter((reservation) => reservation.status !== 'cancelled' && reservation.status !== 'blocked')
-    .reduce((total, reservation) => total + reservation.amount, 0);
+  const closedReservations = reservations.filter((reservation) => reservation.status === 'confirmed');
+  const closedReservationsCount = closedReservations.length;
+  const grossRevenue = closedReservations.reduce((total, reservation) => {
+    const amount = Number(reservation.amount);
+    return total + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
   const totalExpenses = expenses.reduce((total, expense) => total + expense.amount, 0);
   const netProfit = grossRevenue - totalExpenses;
 
@@ -62,7 +65,10 @@ export default async function FinancePage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">Faturamento Bruto: {formatCurrency(grossRevenue)}</div>
+        <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">
+          Faturamento Bruto: {formatCurrency(grossRevenue)}
+          <p className="mt-2 text-xs text-slate-400">{closedReservationsCount} reservas fechadas consideradas.</p>
+        </div>
         <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">Total de Despesas: {formatCurrency(totalExpenses)}</div>
         <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">Lucro Líquido: {formatCurrency(netProfit)}</div>
       </section>
@@ -105,7 +111,8 @@ export default async function FinancePage() {
         <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-400">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/50 px-3 py-2">
             <Landmark className="h-4 w-4 text-sky-300" />
-            Receita baseada no campo <span className="font-medium text-slate-200">amount</span> das reservas.
+            Receita baseada na soma do campo <span className="font-medium text-slate-200">amount</span> das reservas
+            <span className="font-medium text-slate-200">confirmed</span>.
           </div>
         </div>
       </section>
