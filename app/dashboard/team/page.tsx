@@ -1,29 +1,39 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { BadgeCheck, BriefcaseBusiness, Clock3, Plus, UsersRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Clock3, Plus, ShieldCheck } from 'lucide-react';
+import type { DashboardFeatureKey } from '@/lib/dashboard-access';
+import { DEFAULT_STAFF_FEATURES } from '@/lib/dashboard-access';
+import {
+  TEAM_PERMISSION_OPTIONS,
+  TEAM_ROLE_OPTIONS,
+  TEAM_SHIFT_OPTIONS,
+  type TeamEmploymentStatus,
+  type TeamShift,
+  type TeamShiftStatus,
+} from '@/lib/team';
 
-import { INITIAL_TEAM_MOCK } from '@/mocks/dashboard';
-
-type TeamRole = 'Recepção' | 'Limpeza' | 'Manutenção' | 'Gestão';
-type EmploymentStatus = 'ativo' | 'inativo';
-type ShiftStatus = 'fora' | 'em_turno';
+type TeamRole = (typeof TEAM_ROLE_OPTIONS)[number];
 
 type TeamMember = {
-  id: string;
+  id: number;
   name: string;
   email: string;
   phone: string;
   role: TeamRole;
-  shift: 'Manhã' | 'Tarde' | 'Noite';
-  employmentStatus: EmploymentStatus;
-  shiftStatus: ShiftStatus;
-  tasksToday: number;
-  finishedTasks: number;
-  lastPunch?: string;
+  shift: TeamShift;
+  employmentStatus: TeamEmploymentStatus;
+  shiftStatus: TeamShiftStatus;
+  lastPunch: string | null;
+  permissions: DashboardFeatureKey[];
+  isCurrentUser: boolean;
+  accountRole: 'admin' | 'staff';
 };
 
-const INITIAL_TEAM: TeamMember[] = INITIAL_TEAM_MOCK.map((member) => ({ ...member }));
+type TeamResponse = {
+  canManage: boolean;
+  members: TeamMember[];
+};
 
 
 function formatDateTime(value?: string) {
@@ -40,16 +50,55 @@ function formatDateTime(value?: string) {
 }
 
 export default function TeamPage() {
-  const [team, setTeam] = useState<TeamMember[]>(INITIAL_TEAM);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [canManage, setCanManage] = useState(false);
+  const [busyMemberId, setBusyMemberId] = useState<number | null>(null);
+  const [savingPermissionsFor, setSavingPermissionsFor] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'Todos' | TeamRole>('Todos');
   const [form, setForm] = useState({
     name: '',
     email: '',
+    password: '',
     phone: '',
-    role: 'Recepção' as TeamRole,
-    shift: 'Manhã' as TeamMember['shift'],
+    role: 'Recepcao' as TeamRole,
+    shift: 'Manha' as TeamMember['shift'],
+    permissions: [...DEFAULT_STAFF_FEATURES] as DashboardFeatureKey[],
   });
+  const [permissionDraft, setPermissionDraft] = useState<Record<number, DashboardFeatureKey[]>>({});
+
+  async function loadTeam() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/tenant/team', { cache: 'no-store' });
+      const payload = (await response.json()) as TeamResponse & { message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? 'Nao foi possivel carregar a equipe.');
+      }
+
+      setTeam(payload.members);
+      setCanManage(payload.canManage);
+      setPermissionDraft(
+        payload.members.reduce<Record<number, DashboardFeatureKey[]>>((acc, member) => {
+          acc[member.id] = member.permissions;
+          return acc;
+        }, {}),
+      );
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Erro inesperado ao carregar equipe.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadTeam();
+  }, []);
 
   const filteredTeam = useMemo(() => {
     return team.filter((member) => {
@@ -66,100 +115,153 @@ export default function TeamPage() {
   }, [roleFilter, search, team]);
 
   const summary = useMemo(() => {
-    const active = team.filter((member) => member.employmentStatus === 'ativo').length;
-    const onShift = team.filter((member) => member.shiftStatus === 'em_turno').length;
-    const totalTasks = team.reduce((sum, member) => sum + member.tasksToday, 0);
-
-    return { active, onShift, totalTasks };
+    return {
+      active: team.filter((member) => member.employmentStatus === 'ativo').length,
+      onShift: team.filter((member) => member.shiftStatus === 'em_turno').length,
+    };
   }, [team]);
 
-  function addMember(event: React.FormEvent<HTMLFormElement>) {
+  async function addMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!form.name || !form.email) {
+    if (!form.name || !form.email || !form.password) {
       return;
     }
 
-    const member: TeamMember = {
-      id: globalThis.crypto?.randomUUID?.() ?? `tm-${Date.now()}`,
-      name: form.name,
-      email: form.email,
-      phone: form.phone || 'Não informado',
-      role: form.role,
-      shift: form.shift,
-      employmentStatus: 'ativo',
-      shiftStatus: 'fora',
-      tasksToday: 0,
-      finishedTasks: 0,
-    };
+    setError(null);
 
-    setTeam((prev) => [member, ...prev]);
+    const response = await fetch('/api/tenant/team', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        phone: form.phone,
+        role: form.role,
+        shift: form.shift,
+        permissions: form.permissions,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json()) as { message?: string };
+      setError(payload.message ?? 'Nao foi possivel criar colaborador.');
+      return;
+    }
+
     setForm({
       name: '',
       email: '',
+      password: '',
       phone: '',
-      role: 'Recepção',
-      shift: 'Manhã',
+      role: 'Recepcao',
+      shift: 'Manha',
+      permissions: [...DEFAULT_STAFF_FEATURES],
     });
+    await loadTeam();
   }
 
-  function toggleEmploymentStatus(memberId: string) {
-    setTeam((prev) =>
-      prev.map((member) => {
-        if (member.id !== memberId) {
-          return member;
-        }
+  function togglePermission(permissions: DashboardFeatureKey[], key: DashboardFeatureKey) {
+    if (permissions.includes(key)) {
+      return permissions.filter((permission) => permission !== key);
+    }
 
-        if (member.employmentStatus === 'ativo') {
-          return { ...member, employmentStatus: 'inativo', shiftStatus: 'fora' };
-        }
-
-        return { ...member, employmentStatus: 'ativo' };
-      }),
-    );
+    return [...permissions, key];
   }
 
-  function toggleShift(memberId: string) {
-    setTeam((prev) =>
-      prev.map((member) => {
-        if (member.id !== memberId || member.employmentStatus !== 'ativo') {
-          return member;
-        }
+  async function runMemberAction(memberId: number, action: 'toggle-employment' | 'toggle-shift') {
+    setBusyMemberId(memberId);
+    setError(null);
 
-        if (member.shiftStatus === 'fora') {
-          return { ...member, shiftStatus: 'em_turno', lastPunch: new Date().toISOString() };
-        }
+    const response = await fetch(`/api/tenant/team/${memberId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action }),
+    });
 
-        return { ...member, shiftStatus: 'fora', lastPunch: new Date().toISOString() };
-      }),
-    );
+    if (!response.ok) {
+      const payload = (await response.json()) as { message?: string };
+      setError(payload.message ?? 'Falha ao atualizar colaborador.');
+      setBusyMemberId(null);
+      return;
+    }
+
+    setBusyMemberId(null);
+    await loadTeam();
   }
 
-  function randomizeTaskProgress(memberId: string) {
-    setTeam((prev) =>
-      prev.map((member) => {
-        if (member.id !== memberId || member.employmentStatus !== 'ativo') {
-          return member;
-        }
+  async function savePermissions(memberId: number) {
+    setSavingPermissionsFor(memberId);
+    setError(null);
 
-        const tasksToday = Math.max(member.tasksToday, 1);
-        const increment = Math.floor(Math.random() * 2) + 1;
-        const finishedTasks = Math.min(tasksToday, member.finishedTasks + increment);
-
-        return { ...member, tasksToday, finishedTasks };
+    const response = await fetch(`/api/tenant/team/${memberId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'set-permissions',
+        permissions: permissionDraft[memberId] ?? [],
       }),
-    );
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json()) as { message?: string };
+      setError(payload.message ?? 'Nao foi possivel salvar permissoes.');
+      setSavingPermissionsFor(null);
+      return;
+    }
+
+    setSavingPermissionsFor(null);
+    await loadTeam();
+  }
+
+  async function deleteMember(member: TeamMember) {
+    if (!canManage) {
+      return;
+    }
+
+    const confirmed = globalThis.confirm(`Deseja excluir o colaborador ${member.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyMemberId(member.id);
+    setError(null);
+
+    const response = await fetch(`/api/tenant/team/${member.id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json()) as { message?: string };
+      setError(payload.message ?? 'Nao foi possivel excluir colaborador.');
+      setBusyMemberId(null);
+      return;
+    }
+
+    setBusyMemberId(null);
+    await loadTeam();
   }
 
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Operação interna</p>
-        <h2 className="mt-3 text-3xl font-semibold text-white">Gerenciamento de Equipe com dados mockados</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Operacao interna</p>
+        <h2 className="mt-3 text-3xl font-semibold text-white">Gerenciamento de Equipe</h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          Controle total sem banco: cadastro de colaboradores, ativação/inativação, batida de turno e evolução de tarefas em tempo real.
+          Controle real da equipe com cadastro de login interno (e-mail/senha), ativacao/inativacao, abertura e encerramento de turno, e permissoes por pagina do sistema.
         </p>
       </section>
+
+      {error ? (
+        <section className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</section>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-[24px] border border-white/10 bg-slate-900/80 p-5 text-white">
@@ -171,8 +273,8 @@ export default function TeamPage() {
           <p className="mt-2 text-3xl font-semibold">{summary.onShift}</p>
         </article>
         <article className="rounded-[24px] border border-white/10 bg-slate-900/80 p-5 text-white">
-          <p className="text-sm text-slate-400">Tarefas planejadas hoje</p>
-          <p className="mt-2 text-3xl font-semibold">{summary.totalTasks}</p>
+          <p className="text-sm text-slate-400">Permissoes configuraveis</p>
+          <p className="mt-2 text-3xl font-semibold">{TEAM_PERMISSION_OPTIONS.length}</p>
         </article>
       </section>
 
@@ -186,7 +288,7 @@ export default function TeamPage() {
               className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2.5 text-sm text-white outline-none ring-sky-300 transition focus:ring md:max-w-sm"
             />
             <div className="flex flex-wrap gap-2">
-              {(['Todos', 'Recepção', 'Limpeza', 'Manutenção', 'Gestão'] as const).map((role) => (
+              {(['Todos', ...TEAM_ROLE_OPTIONS] as const).map((role) => (
                 <button
                   key={role}
                   type="button"
@@ -205,6 +307,7 @@ export default function TeamPage() {
           </div>
 
           <div className="mt-5 grid gap-3">
+            {loading ? <p className="text-sm text-slate-400">Carregando equipe...</p> : null}
             {filteredTeam.map((member) => (
               <div key={member.id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -215,6 +318,7 @@ export default function TeamPage() {
                     </p>
                     <p className="mt-1 text-xs text-slate-500">{member.email}</p>
                     <p className="text-xs text-slate-500">{member.phone}</p>
+                    <p className="text-xs text-slate-500">Conta: {member.accountRole === 'admin' ? 'Gestor' : 'Colaborador'}</p>
                   </div>
 
                   <div className="flex flex-wrap gap-2 text-xs">
@@ -238,47 +342,92 @@ export default function TeamPage() {
                     >
                       {member.shiftStatus === 'em_turno' ? 'Em turno' : 'Fora de turno'}
                     </span>
+                    {member.isCurrentUser ? (
+                      <span className="rounded-full border border-sky-300/40 bg-sky-500/10 px-2.5 py-1 text-sky-200">Voce</span>
+                    ) : null}
                   </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                   <span className="inline-flex items-center gap-1">
-                    <BriefcaseBusiness className="h-3.5 w-3.5 text-sky-300" />
-                    {member.finishedTasks}/{member.tasksToday} tarefas concluídas
-                  </span>
-                  <span className="inline-flex items-center gap-1">
                     <Clock3 className="h-3.5 w-3.5 text-emerald-300" />
-                    Última batida: {formatDateTime(member.lastPunch)}
+                    Ultima batida: {formatDateTime(member.lastPunch ?? undefined)}
                   </span>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => toggleShift(member.id)}
-                    disabled={member.employmentStatus !== 'ativo'}
+                    onClick={() => void runMemberAction(member.id, 'toggle-shift')}
+                    disabled={!canManage || member.employmentStatus !== 'ativo' || busyMemberId === member.id}
                     className="rounded-xl border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-200 disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     {member.shiftStatus === 'fora' ? 'Iniciar turno' : 'Encerrar turno'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => randomizeTaskProgress(member.id)}
-                    disabled={member.employmentStatus !== 'ativo'}
-                    className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 disabled:cursor-not-allowed disabled:opacity-35"
-                  >
-                    Avançar tarefas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleEmploymentStatus(member.id)}
-                    className="rounded-xl border border-white/15 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200"
+                    onClick={() => void runMemberAction(member.id, 'toggle-employment')}
+                    disabled={!canManage || busyMemberId === member.id}
+                    className="rounded-xl border border-white/15 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     {member.employmentStatus === 'ativo' ? 'Inativar colaborador' : 'Reativar colaborador'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteMember(member)}
+                    disabled={!canManage || member.isCurrentUser || member.accountRole === 'admin' || busyMemberId === member.id}
+                    className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    Excluir colaborador
+                  </button>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/40 p-3">
+                  <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-sky-200">
+                    <ShieldCheck className="h-3.5 w-3.5" /> Permissoes no painel
+                  </p>
+
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {TEAM_PERMISSION_OPTIONS.map((option) => {
+                      const checked = (permissionDraft[member.id] ?? []).includes(option.key);
+
+                      return (
+                        <label key={option.key} className="flex items-center gap-2 rounded-lg border border-white/10 px-2 py-1.5 text-xs text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={!canManage || member.accountRole === 'admin'}
+                            onChange={() =>
+                              setPermissionDraft((prev) => ({
+                                ...prev,
+                                [member.id]: togglePermission(prev[member.id] ?? [], option.key),
+                              }))
+                            }
+                            className="h-3.5 w-3.5 rounded border-white/20 bg-slate-950"
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {member.accountRole !== 'admin' ? (
+                    <button
+                      type="button"
+                      onClick={() => void savePermissions(member.id)}
+                      disabled={!canManage || savingPermissionsFor === member.id}
+                      className="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      {savingPermissionsFor === member.id ? 'Salvando...' : 'Salvar permissoes'}
+                    </button>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">Gestor sempre enxerga todas as opcoes do sistema.</p>
+                  )}
                 </div>
               </div>
             ))}
+
+            {!loading && filteredTeam.length === 0 ? <p className="text-sm text-slate-400">Nenhum colaborador encontrado.</p> : null}
           </div>
         </article>
 
@@ -287,8 +436,8 @@ export default function TeamPage() {
             onSubmit={addMember}
             className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20"
           >
-            <h3 className="text-xl font-semibold text-white">Novo colaborador (mock)</h3>
-            <p className="mt-1 text-sm text-slate-400">Cadastro local para simular o time operacional da pousada.</p>
+            <h3 className="text-xl font-semibold text-white">Novo colaborador</h3>
+            <p className="mt-1 text-sm text-slate-400">Crie login interno com e-mail e senha para o colaborador acessar o sistema.</p>
 
             <div className="mt-4 grid gap-3">
               <input
@@ -307,6 +456,15 @@ export default function TeamPage() {
                 className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
               />
               <input
+                type="password"
+                minLength={6}
+                value={form.password}
+                onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                required
+                placeholder="Senha de acesso"
+                className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
+              />
+              <input
                 value={form.phone}
                 onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
                 placeholder="Telefone"
@@ -319,48 +477,63 @@ export default function TeamPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as TeamRole }))}
                   className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
                 >
-                  <option value="Recepção">Recepção</option>
+                  <option value="Recepcao">Recepcao</option>
                   <option value="Limpeza">Limpeza</option>
-                  <option value="Manutenção">Manutenção</option>
-                  <option value="Gestão">Gestão</option>
+                  <option value="Manutencao">Manutencao</option>
+                  <option value="Gestao">Gestao</option>
                 </select>
                 <select
                   value={form.shift}
                   onChange={(event) => setForm((prev) => ({ ...prev, shift: event.target.value as TeamMember['shift'] }))}
                   className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
                 >
-                  <option value="Manhã">Manhã</option>
-                  <option value="Tarde">Tarde</option>
-                  <option value="Noite">Noite</option>
+                  {TEAM_SHIFT_OPTIONS.map((shift) => (
+                    <option key={shift} value={shift}>
+                      {shift}
+                    </option>
+                  ))}
                 </select>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-sky-200">Permissoes de acesso</p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {TEAM_PERMISSION_OPTIONS.map((option) => {
+                    const checked = form.permissions.includes(option.key);
+
+                    return (
+                      <label key={option.key} className="flex items-center gap-2 rounded-lg border border-white/10 px-2 py-1.5 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              permissions: togglePermission(prev.permissions, option.key),
+                            }))
+                          }
+                          className="h-3.5 w-3.5 rounded border-white/20 bg-slate-950"
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
             <button
               type="submit"
+              disabled={!canManage}
               className="mt-4 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-900/30"
             >
               <Plus className="h-4 w-4" /> Adicionar colaborador
             </button>
-          </form>
 
-          <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
-            <h3 className="text-xl font-semibold text-white">Checklist do turno</h3>
-            <div className="mt-4 space-y-3 text-sm text-slate-300">
-              <p className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2">
-                <BadgeCheck className="mr-2 inline h-4 w-4 text-emerald-300" />
-                Validar abertura da recepção e kit de boas-vindas.
-              </p>
-              <p className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2">
-                <UsersRound className="mr-2 inline h-4 w-4 text-sky-300" />
-                Distribuir quartos para limpeza antes das 10h.
-              </p>
-              <p className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2">
-                <BriefcaseBusiness className="mr-2 inline h-4 w-4 text-sky-300" />
-                Revisar chamados de manutenção pendentes.
-              </p>
-            </div>
-          </section>
+            {!canManage ? (
+              <p className="mt-3 text-xs text-slate-500">Somente gestores podem criar colaboradores e editar permissoes.</p>
+            ) : null}
+          </form>
         </article>
       </section>
     </div>

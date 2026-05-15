@@ -3,12 +3,13 @@ import { getDb } from "@/lib/db";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { Room } = await getDb();
     const body = await request.json();
-    const roomId = params.id; // Ex: 'vm-standard'
+    const resolvedParams = await params;
+    const roomId = resolvedParams.id; // Ex: 'vm-standard'
 
     const room = await Room.findOne({
       where: { localRoomId: roomId, tenantId: 1 },

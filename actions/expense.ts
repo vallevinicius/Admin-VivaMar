@@ -23,6 +23,7 @@ export async function createExpenseAction(input: ExpenseInput) {
 
   await Expense.create({
     tenantId: session.tenantId,
+    createdByUserId: session.userId,
     description: input.description,
     amount: input.amount,
     date: input.date,

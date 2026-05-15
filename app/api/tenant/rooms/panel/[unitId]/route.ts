@@ -13,11 +13,12 @@ type OperationalStatus = (typeof VALID_STATUSES)[number];
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { unitId: string } }
+  { params }: { params: Promise<{ unitId: string }> }
 ) {
   try {
     const tenantId = 1;
-    const unitId = params.unitId;
+    const resolvedParams = await params;
+    const unitId = resolvedParams.unitId;
 
     // unitId format: ${localRoomId}_${unitNumber}
     // localRoomId only contains [a-z0-9-], so the last "_" separates it from unitNumber

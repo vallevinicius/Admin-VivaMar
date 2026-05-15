@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authConfig, verifySessionToken } from '@/lib/auth';
+import { canAccessDashboardPath, getDefaultDashboardHref } from '@/lib/dashboard-access';
 
 export async function middleware(request: NextRequest) {
   const isDashboardRoute = request.nextUrl.pathname.startsWith('/dashboard');
@@ -12,8 +13,25 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (request.nextUrl.pathname === '/' && session) {
-    return NextResponse.redirect(new URL('/dashboard/calendar', request.url));
+  if (isDashboardRoute && session) {
+    const canAccess = canAccessDashboardPath(
+      request.nextUrl.pathname,
+      session.plan,
+      session.role,
+      session.permissions,
+    );
+
+    if (!canAccess || !session.active) {
+      const destination = getDefaultDashboardHref(
+        session.plan,
+        session.role,
+        session.permissions,
+      );
+
+      if (request.nextUrl.pathname !== destination) {
+        return NextResponse.redirect(new URL(destination, request.url));
+      }
+    }
   }
 
   return NextResponse.next();

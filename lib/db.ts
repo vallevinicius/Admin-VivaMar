@@ -32,6 +32,75 @@ async function ensureRoomAmenitiesColumn(models: DbModels) {
   }
 }
 
+async function ensureUserTeamColumns(models: DbModels) {
+  const queryInterface = models.sequelize.getQueryInterface();
+  const table = await queryInterface.describeTable('users');
+
+  if (!table.name) {
+    await queryInterface.addColumn('users', 'name', {
+      type: DataTypes.STRING(120),
+      allowNull: false,
+      defaultValue: '',
+    });
+  }
+
+  if (!table.phone) {
+    await queryInterface.addColumn('users', 'phone', {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+      defaultValue: null,
+    });
+  }
+
+  if (!table.team_role) {
+    await queryInterface.addColumn('users', 'team_role', {
+      type: DataTypes.ENUM('Recepcao', 'Limpeza', 'Manutencao', 'Gestao'),
+      allowNull: false,
+      defaultValue: 'Recepcao',
+    });
+  }
+
+  if (!table.employment_status) {
+    await queryInterface.addColumn('users', 'employment_status', {
+      type: DataTypes.ENUM('active', 'inactive'),
+      allowNull: false,
+      defaultValue: 'active',
+    });
+  }
+
+  if (!table.shift_status) {
+    await queryInterface.addColumn('users', 'shift_status', {
+      type: DataTypes.ENUM('off', 'on_shift'),
+      allowNull: false,
+      defaultValue: 'off',
+    });
+  }
+
+  if (!table.shift_label) {
+    await queryInterface.addColumn('users', 'shift_label', {
+      type: DataTypes.ENUM('morning', 'afternoon', 'night'),
+      allowNull: false,
+      defaultValue: 'morning',
+    });
+  }
+
+  if (!table.last_punch_at) {
+    await queryInterface.addColumn('users', 'last_punch_at', {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    });
+  }
+
+  if (!table.dashboard_permissions) {
+    await queryInterface.addColumn('users', 'dashboard_permissions', {
+      type: DataTypes.TEXT,
+      allowNull: false,
+      defaultValue: '[]',
+    });
+  }
+}
+
 export async function getDb(): Promise<DbModels> {
   if (!global.__sequelizeModelsPromise) {
     global.__sequelizeModelsPromise = (async () => {
@@ -44,6 +113,7 @@ export async function getDb(): Promise<DbModels> {
           await sequelize.sync({ alter: true });
         }
         await ensureRoomAmenitiesColumn(global.__sequelizeModels);
+        await ensureUserTeamColumns(global.__sequelizeModels);
       }
 
       return global.__sequelizeModels;
@@ -54,5 +124,8 @@ export async function getDb(): Promise<DbModels> {
     });
   }
 
-  return global.__sequelizeModelsPromise;
+  const models = await global.__sequelizeModelsPromise;
+  await ensureRoomAmenitiesColumn(models);
+  await ensureUserTeamColumns(models);
+  return models;
 }
