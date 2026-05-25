@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Clock3, Plus, ShieldCheck } from 'lucide-react';
 import type { DashboardFeatureKey } from '@/lib/dashboard-access';
 import { DEFAULT_STAFF_FEATURES } from '@/lib/dashboard-access';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import {
   TEAM_PERMISSION_OPTIONS,
   TEAM_ROLE_OPTIONS,
@@ -68,6 +69,7 @@ export default function TeamPage() {
     permissions: [...DEFAULT_STAFF_FEATURES] as DashboardFeatureKey[],
   });
   const [permissionDraft, setPermissionDraft] = useState<Record<number, DashboardFeatureKey[]>>({});
+  const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
 
   async function loadTeam() {
     setLoading(true);
@@ -226,15 +228,18 @@ export default function TeamPage() {
       return;
     }
 
-    const confirmed = globalThis.confirm(`Deseja excluir o colaborador ${member.name}?`);
-    if (!confirmed) {
+    setMemberToDelete(member);
+  }
+
+  async function confirmDeleteMember() {
+    if (!memberToDelete) {
       return;
     }
 
-    setBusyMemberId(member.id);
+    setBusyMemberId(memberToDelete.id);
     setError(null);
 
-    const response = await fetch(`/api/tenant/team/${member.id}`, {
+    const response = await fetch(`/api/tenant/team/${memberToDelete.id}`, {
       method: 'DELETE',
     });
 
@@ -246,6 +251,7 @@ export default function TeamPage() {
     }
 
     setBusyMemberId(null);
+    setMemberToDelete(null);
     await loadTeam();
   }
 
@@ -536,6 +542,21 @@ export default function TeamPage() {
           </form>
         </article>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(memberToDelete)}
+        title="Excluir colaborador"
+        description={
+          memberToDelete
+            ? `Tem certeza que deseja excluir ${memberToDelete.name}? Esta acao nao pode ser desfeita.`
+            : ''
+        }
+        confirmLabel="Excluir colaborador"
+        cancelLabel="Manter colaborador"
+        loading={memberToDelete ? busyMemberId === memberToDelete.id : false}
+        onCancel={() => setMemberToDelete(null)}
+        onConfirm={() => void confirmDeleteMember()}
+      />
     </div>
   );
 }
