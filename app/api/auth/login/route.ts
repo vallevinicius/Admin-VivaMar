@@ -1,8 +1,22 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { createSessionToken, authConfig } from '@/lib/auth';
+import { resolveDashboardPermissionsForRole, sanitizeDashboardPermissions } from '@/lib/dashboard-access';
 import { getDb } from '@/lib/db';
 import { DEMO_TENANT_ID, DEMO_TENANT_NAME, DEMO_USER_EMAIL, DEMO_USER_PASSWORD } from '@/services/demoData';
+
+function parseDashboardPermissions(raw: string | null | undefined) {
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return sanitizeDashboardPermissions(parsed);
+  } catch {
+    return [];
+  }
+}
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { email?: string; password?: string };
@@ -18,6 +32,9 @@ export async function POST(request: Request) {
       tenantId: DEMO_TENANT_ID,
       plan: 'premium',
       tenantName: DEMO_TENANT_NAME,
+      role: 'admin',
+      permissions: [],
+      active: true,
     });
 
     const response = NextResponse.json({ ok: true });
@@ -49,6 +66,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Conta inativa ou inexistente.' }, { status: 403 });
   }
 
+  if (user.employmentStatus === 'inactive') {
+    return NextResponse.json({ message: 'Colaborador inativo. Solicite reativacao ao gestor.' }, { status: 403 });
+  }
+
   const isValid = await bcrypt.compare(body.password, user.passwordHash);
 
   if (!isValid) {
@@ -60,6 +81,9 @@ export async function POST(request: Request) {
     tenantId: tenant.id,
     plan: tenant.plan,
     tenantName: tenant.name,
+    role: user.role,
+    permissions: resolveDashboardPermissionsForRole(user.role, parseDashboardPermissions(user.dashboardPermissions)),
+    active: user.employmentStatus === 'active',
   });
 
   const response = NextResponse.json({ ok: true });

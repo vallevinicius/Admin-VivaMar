@@ -6,10 +6,10 @@ export const DEMO_USER_EMAIL = 'gestao@pousadavivamar.com';
 export const DEMO_USER_PASSWORD = 'vivamar123';
 
 const demoRooms: Room[] = [
-  { id: 'vm-bangalow-01', channexRoomTypeId: 'vm-rt-01', name: 'Bangalô Oceano', maxGuests: 2, status: 'active' },
-  { id: 'vm-suite-02', channexRoomTypeId: 'vm-rt-02', name: 'Suíte Coral Premium', maxGuests: 3, status: 'active' },
-  { id: 'vm-familia-03', channexRoomTypeId: 'vm-rt-03', name: 'Suíte Família Maré Alta', maxGuests: 5, status: 'active' },
-  { id: 'vm-jardim-04', channexRoomTypeId: 'vm-rt-04', name: 'Quarto Jardim Tropical', maxGuests: 2, status: 'maintenance' },
+  { id: 'vm-bangalow-01', channexRoomTypeId: 'vm-rt-01', name: 'Bangalô Oceano', maxGuests: 2, price: 420, quantity: 1, status: 'active' },
+  { id: 'vm-suite-02', channexRoomTypeId: 'vm-rt-02', name: 'Suíte Coral Premium', maxGuests: 3, price: 590, quantity: 1, status: 'active' },
+  { id: 'vm-familia-03', channexRoomTypeId: 'vm-rt-03', name: 'Suíte Família Maré Alta', maxGuests: 5, price: 740, quantity: 1, status: 'active' },
+  { id: 'vm-jardim-04', channexRoomTypeId: 'vm-rt-04', name: 'Quarto Jardim Tropical', maxGuests: 2, price: 360, quantity: 1, status: 'maintenance' },
 ];
 
 let demoReservations: Reservation[] = [

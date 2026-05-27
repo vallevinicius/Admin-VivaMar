@@ -106,8 +106,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await getAuthenticatedSession();
-  const tenantId = resolveTenantId(session);
+  // O calendário atual carrega reservas do tenant fixo 1 em /api/tenant/inventory.
+  // Para manter consistência no F5, a exclusão também precisa atuar no mesmo tenant.
+  const tenantId = 1;
 
   const body = (await request.json()) as { reservationId?: string };
   const reservationId = body.reservationId?.trim();

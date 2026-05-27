@@ -35,6 +35,8 @@ export function mapChannexRoomType(roomType: ChannexRoomType): Room {
     channexRoomTypeId: roomType.id,
     name: roomType.attributes?.title ?? roomType.attributes?.name ?? 'Room Type',
     maxGuests: roomType.attributes?.max_occupancy?.adults ?? 1,
+    price: 0,
+    quantity: 1,
     status: roomType.attributes?.status === 'active' ? 'active' : 'maintenance',
   };
 }

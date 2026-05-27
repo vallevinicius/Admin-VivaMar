@@ -81,6 +81,7 @@ export async function GET() {
     const [user] = await db.User.findOrCreate({
       where: { email: "cliente@vivamar.com" },
       defaults: {
+        name: "Cliente de Teste",
         email: "cliente@vivamar.com",
         passwordHash: "senha-falsa-123",
         role: "customer", // O papel novo que criamos!

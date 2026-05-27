@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import type { TenantPlan } from '@/models/Tenant';
+import type { DashboardFeatureKey, UserAccessRole } from '@/lib/dashboard-access';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -14,6 +15,9 @@ export type SessionPayload = {
   tenantId: number;
   plan: TenantPlan;
   tenantName: string;
+  role: UserAccessRole;
+  permissions: DashboardFeatureKey[];
+  active: boolean;
   exp: number;
 };
 
@@ -70,13 +74,26 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       return null;
     }
 
-    const payload = JSON.parse(base64UrlDecodeText(body)) as SessionPayload;
+    const payload = JSON.parse(base64UrlDecodeText(body)) as Partial<SessionPayload>;
 
     if (!payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) {
       return null;
     }
 
-    return payload;
+    if (!payload.userId || !payload.tenantId || !payload.plan || !payload.tenantName) {
+      return null;
+    }
+
+    return {
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      plan: payload.plan,
+      tenantName: payload.tenantName,
+      role: payload.role ?? 'admin',
+      permissions: payload.permissions ?? [],
+      active: payload.active ?? true,
+      exp: payload.exp,
+    };
   } catch {
     return null;
   }

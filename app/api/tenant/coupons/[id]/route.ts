@@ -4,14 +4,15 @@ import { getDb } from "@/lib/db";
 // ATUALIZAR: Liga ou desliga o cupom
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const resolvedParams = await params;
     const body = await request.json();
     const { Coupon } = await getDb();
 
     const coupon = await Coupon.findOne({
-      where: { id: params.id, tenantId: 1 },
+      where: { id: resolvedParams.id, tenantId: 1 },
     });
     if (!coupon)
       return NextResponse.json(
@@ -30,12 +31,13 @@ export async function PATCH(
 // DELETAR: Remove o cupom do banco
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const resolvedParams = await params;
     const { Coupon } = await getDb();
     const coupon = await Coupon.findOne({
-      where: { id: params.id, tenantId: 1 },
+      where: { id: resolvedParams.id, tenantId: 1 },
     });
 
     if (!coupon)

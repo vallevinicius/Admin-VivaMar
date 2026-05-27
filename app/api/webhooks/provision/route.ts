@@ -45,6 +45,7 @@ export async function POST(request: Request) {
 
       await User.create(
         {
+          name: payload.adminEmail!.split('@')[0],
           email: payload.adminEmail!,
           passwordHash,
           role: 'admin',

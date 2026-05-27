@@ -3,11 +3,12 @@ import { getDb } from "@/lib/db";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const tenantId = 1;
-    const localRoomId = params.id;
+    const resolvedParams = await params;
+    const localRoomId = resolvedParams.id;
     const body = await request.json();
 
     const { Room } = await getDb();
@@ -85,11 +86,12 @@ export async function PATCH(
 
 export async function DELETE(
   _: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const tenantId = 1;
-    const localRoomId = params.id;
+    const resolvedParams = await params;
+    const localRoomId = resolvedParams.id;
 
     const { Room, Reservation } = await getDb();
 
