@@ -182,22 +182,39 @@ export function UnifiedCalendar() {
   useEffect(() => {
     async function loadData() {
       setLoading(true);
-      const response = await fetch("/api/tenant/inventory");
-      const payload = (await response.json()) as {
-        rooms: Room[];
-        reservations: Reservation[];
-      };
-      setRooms(payload.rooms);
-      setReservations(payload.reservations);
-      setLoading(false);
+      try {
+        const response = await fetch("/api/tenant/inventory");
+
+        if (!response.ok) {
+          throw new Error("Falha ao carregar inventário.");
+        }
+
+        const payload = (await response.json()) as {
+          rooms?: Room[];
+          reservations?: Reservation[];
+        };
+
+        setRooms(Array.isArray(payload.rooms) ? payload.rooms : []);
+        setReservations(
+          Array.isArray(payload.reservations) ? payload.reservations : [],
+        );
+      } catch {
+        setRooms([]);
+        setReservations([]);
+        showToast("Não foi possível carregar o calendário.");
+      } finally {
+        setLoading(false);
+      }
     }
 
     void loadData();
-  }, []);
+  }, [showToast]);
 
   const visibleReservations = useMemo(
     () =>
-      reservations.filter((reservation) => reservation.status !== "cancelled"),
+      (Array.isArray(reservations) ? reservations : []).filter(
+        (reservation) => reservation.status !== "cancelled",
+      ),
     [reservations],
   );
   const days = useMemo(

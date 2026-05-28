@@ -17,24 +17,38 @@ export function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-    setLoading(false);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { message?: string };
-      setError(payload.message ?? 'Não foi possível acessar a conta.');
-      return;
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { message?: string };
+        setError(payload.message ?? 'Não foi possível acessar a conta.');
+        return;
+      }
+
+      router.push('/dashboard/calendar');
+      router.refresh();
+    } catch (fetchError) {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        setError('A requisição demorou demais. Verifique o servidor e tente novamente.');
+        return;
+      }
+
+      setError('Não foi possível conectar ao servidor. Tente novamente em instantes.');
+    } finally {
+      clearTimeout(timeout);
+      setLoading(false);
     }
-
-    router.push('/dashboard/calendar');
-    router.refresh();
   }
 
   return (
