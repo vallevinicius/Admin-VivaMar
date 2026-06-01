@@ -2,11 +2,9 @@
 
 import { motion } from 'framer-motion';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 
 export function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState('gestao@pousadavivamar.com');
   const [password, setPassword] = useState('vivamar123');
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +21,8 @@ export function LoginForm() {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -36,8 +36,7 @@ export function LoginForm() {
         return;
       }
 
-      router.push('/dashboard/calendar');
-      router.refresh();
+      window.location.assign('/dashboard/calendar');
     } catch (fetchError) {
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         setError('A requisição demorou demais. Verifique o servidor e tente novamente.');
