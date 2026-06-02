@@ -10,6 +10,16 @@ export const authConfig = {
   tokenTtlSeconds: 60 * 60 * 8,
 };
 
+export function shouldUseSecureCookies(request: Request) {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+
+  if (forwardedProto) {
+    return forwardedProto === 'https';
+  }
+
+  return new URL(request.url).protocol === 'https:';
+}
+
 export type SessionPayload = {
   userId: number;
   tenantId: number;

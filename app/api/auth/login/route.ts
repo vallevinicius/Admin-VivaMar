@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
-import { createSessionToken, authConfig } from '@/lib/auth';
+import { createSessionToken, authConfig, shouldUseSecureCookies } from '@/lib/auth';
 import { resolveDashboardPermissionsForRole, sanitizeDashboardPermissions } from '@/lib/dashboard-access';
 import { getDb } from '@/lib/db';
 import { DEMO_TENANT_ID, DEMO_TENANT_NAME, DEMO_USER_EMAIL, DEMO_USER_PASSWORD } from '@/services/demoData';
@@ -20,6 +20,7 @@ function parseDashboardPermissions(raw: string | null | undefined) {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { email?: string; password?: string };
+  const secureCookie = shouldUseSecureCookies(request);
 
   if (!body.email || !body.password) {
     return NextResponse.json({ message: 'Informe e-mail e senha.' }, { status: 400 });
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
     response.cookies.set(authConfig.cookieName, token, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookie,
       path: '/',
       maxAge: authConfig.tokenTtlSeconds,
     });
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
   response.cookies.set(authConfig.cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureCookie,
     path: '/',
     maxAge: authConfig.tokenTtlSeconds,
   });

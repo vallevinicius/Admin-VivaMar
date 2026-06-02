@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { getAuthenticatedSession } from "@/lib/auth";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { getVisibleDashboardNavItems } from "@/lib/dashboard-access";
@@ -12,7 +13,7 @@ export default async function DashboardLayout({
   const session = await getAuthenticatedSession();
 
   if (!session) {
-    return null;
+    redirect('/');
   }
 
   const navItems = getVisibleDashboardNavItems(
