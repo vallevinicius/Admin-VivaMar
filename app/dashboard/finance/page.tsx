@@ -139,13 +139,29 @@ export default async function FinancePage() {
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-400">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/50 px-3 py-2">
-            <Landmark className="h-4 w-4 text-sky-300" />
-            O faturamento bruto considera o valor total de todas as reservas{' '}
-            <span className="font-medium text-emerald-300">confirmadas</span> e{' '}
-            <span className="font-medium text-amber-300">pendentes de pagamento</span>.
-            Reservas canceladas ou bloqueadas não entram no cálculo.
+        <div className="mt-5 rounded-2xl border border-sky-400/20 bg-gradient-to-r from-slate-950/95 via-slate-900/85 to-slate-950/95 p-4 text-sm text-slate-300 shadow-lg shadow-slate-950/40">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg border border-sky-300/20 bg-sky-400/10 p-2 text-sky-300">
+                <Landmark className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-100">Como o faturamento bruto é calculado</p>
+                <p className="mt-1 leading-relaxed text-slate-400">O total considera o valor integral das reservas com status ativos.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 font-medium text-emerald-200">
+                Confirmadas
+              </span>
+              <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 font-medium text-amber-200">
+                Pendentes de pagamento
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-400">
+                Canceladas e bloqueadas ficam de fora
+              </span>
+            </div>
           </div>
         </div>
       </section>

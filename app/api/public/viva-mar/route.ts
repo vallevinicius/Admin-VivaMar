@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAvailableRooms } from "@/services/tenantService";
 
+function removeInternalRoomFields(room: Record<string, unknown>) {
+  const { channexRoomTypeId: _channexRoomTypeId, ...publicRoom } = room;
+  return publicRoom;
+}
+
 // 1. GET: Busca os quartos e calcula a disponibilidade
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -9,11 +14,11 @@ export async function GET(request: Request) {
   const checkOut = searchParams.get("checkOut");
 
   try {
-    const rooms = await getAvailableRooms(
+    const rooms = (await getAvailableRooms(
       1,
       checkIn || undefined,
       checkOut || undefined,
-    );
+    )).map((room) => removeInternalRoomFields(room as Record<string, unknown>));
 
     return NextResponse.json(rooms, {
       headers: {
