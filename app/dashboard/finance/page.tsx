@@ -1,4 +1,4 @@
-import { Landmark } from 'lucide-react';
+import { Landmark, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { ExpenseDeleteButton } from '@/components/expense-delete-button';
 import { ExpenseModalForm } from '@/components/expense-modal-form';
 import { getAuthenticatedSession } from '@/lib/auth';
@@ -44,9 +44,11 @@ export default async function FinancePage() {
   }
 
   const [reservations, expenses] = await Promise.all([getReservations(session.tenantId), getExpenses(session.tenantId)]);
-  const closedReservations = reservations.filter((reservation) => reservation.status === 'confirmed');
-  const closedReservationsCount = closedReservations.length;
-  const grossRevenue = closedReservations.reduce((total, reservation) => {
+  const activeReservations = reservations.filter(
+    (reservation) => reservation.status === 'confirmed' || reservation.status === 'pending',
+  );
+  const activeReservationsCount = activeReservations.length;
+  const grossRevenue = activeReservations.reduce((total, reservation) => {
     const amount = Number(reservation.amount);
     return total + (Number.isFinite(amount) ? amount : 0);
   }, 0);
@@ -67,11 +69,35 @@ export default async function FinancePage() {
 
       <section className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">
-          Faturamento Bruto: {formatCurrency(grossRevenue)}
-          <p className="mt-2 text-xs text-slate-400">{closedReservationsCount} reservas fechadas consideradas.</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-400">Faturamento Bruto</p>
+            <div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-300">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-3 text-3xl font-semibold">{formatCurrency(grossRevenue)}</p>
+          <p className="mt-2 text-xs text-slate-500">{activeReservationsCount} reserva{activeReservationsCount !== 1 ? 's' : ''} ativa{activeReservationsCount !== 1 ? 's' : ''} considerada{activeReservationsCount !== 1 ? 's' : ''}</p>
         </div>
-        <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">Total de Despesas: {formatCurrency(totalExpenses)}</div>
-        <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">Lucro Líquido: {formatCurrency(netProfit)}</div>
+        <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-400">Total de Despesas</p>
+            <div className="rounded-xl bg-rose-500/10 p-2 text-rose-300">
+              <TrendingDown className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-rose-300">{formatCurrency(totalExpenses)}</p>
+          <p className="mt-2 text-xs text-slate-500">{expenses.length} custo{expenses.length !== 1 ? 's' : ''} registrado{expenses.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className={`rounded-[28px] border p-6 text-white ${netProfit >= 0 ? 'border-emerald-400/20 bg-emerald-950/40' : 'border-rose-400/20 bg-rose-950/40'}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-400">Lucro Líquido</p>
+            <div className={`rounded-xl p-2 ${netProfit >= 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>
+              <Wallet className="h-4 w-4" />
+            </div>
+          </div>
+          <p className={`mt-3 text-3xl font-semibold ${netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(netProfit)}</p>
+          <p className="mt-2 text-xs text-slate-500">Faturamento menos despesas</p>
+        </div>
       </section>
 
       <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
@@ -116,8 +142,10 @@ export default async function FinancePage() {
         <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-400">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/50 px-3 py-2">
             <Landmark className="h-4 w-4 text-sky-300" />
-            Receita baseada na soma do campo <span className="font-medium text-slate-200">amount</span> das reservas
-            <span className="font-medium text-slate-200">confirmed</span>.
+            O faturamento bruto considera o valor total de todas as reservas{' '}
+            <span className="font-medium text-emerald-300">confirmadas</span> e{' '}
+            <span className="font-medium text-amber-300">pendentes de pagamento</span>.
+            Reservas canceladas ou bloqueadas não entram no cálculo.
           </div>
         </div>
       </section>

@@ -1,13 +1,7 @@
 import { getDb } from "@/lib/db";
 import {
   DEMO_TENANT_ID,
-  createDemoExpense,
-  deleteDemoExpense,
-  deleteDemoReservation,
-  getDemoExpenses,
-  getDemoReservations,
   getDemoRooms,
-  updateDemoReservation,
 } from "@/services/demoData";
 import type { Expense, Reservation, Room } from "@/types/channex";
 import { isChannexConfigured } from "@/lib/channex";
@@ -103,7 +97,7 @@ function mapExpense(
 
 function shouldUseChannexLiveData(tenantId: number) {
   return (
-    tenantId !== DEMO_TENANT_ID &&
+    tenantId > 0 &&
     isChannexConfigured() &&
     process.env.CHANNEX_PROPERTY_ID
   );
@@ -112,10 +106,6 @@ function shouldUseChannexLiveData(tenantId: number) {
 export async function getReservations(
   tenantId: number,
 ): Promise<Reservation[]> {
-  if (tenantId === DEMO_TENANT_ID) {
-    return getDemoReservations();
-  }
-
   if (shouldUseChannexLiveData(tenantId)) {
     try {
       const channexReservations = await fetchChannexBookings(
@@ -142,12 +132,18 @@ export async function getReservations(
       order: [["checkIn", "ASC"]],
     });
 
-    return reservations.map((reservation) => {
-      const room = reservation.get("room") as InstanceType<typeof Room>;
-      return mapReservation(reservation, room.localRoomId);
-    });
+    return reservations
+      .map((reservation) => {
+        const room = reservation.get("room") as InstanceType<typeof Room> | null;
+        if (!room) {
+          return null;
+        }
+
+        return mapReservation(reservation, room.localRoomId);
+      })
+      .filter((reservation): reservation is Reservation => reservation !== null);
   } catch {
-    return getDemoReservations();
+    return [];
   }
 }
 
@@ -181,10 +177,6 @@ export async function updateReservation(
   tenantId: number,
   updatedReservation: Reservation,
 ): Promise<Reservation> {
-  if (tenantId === DEMO_TENANT_ID) {
-    return updateDemoReservation(updatedReservation);
-  }
-
   const { Room, Reservation } = await getDb();
 
   const room = await Room.findOne({
@@ -228,11 +220,6 @@ export async function deleteReservation(
   tenantId: number,
   reservationId: string,
 ): Promise<void> {
-  if (tenantId === DEMO_TENANT_ID) {
-    deleteDemoReservation(reservationId);
-    return;
-  }
-
   const { Reservation } = await getDb();
   const parsedId = Number(reservationId);
 
@@ -252,10 +239,6 @@ export async function deleteReservation(
 }
 
 export async function getExpenses(tenantId: number): Promise<Expense[]> {
-  if (tenantId === DEMO_TENANT_ID) {
-    return getDemoExpenses();
-  }
-
   try {
     const { Expense } = await getDb();
     const expenses = await Expense.findAll({
@@ -267,7 +250,7 @@ export async function getExpenses(tenantId: number): Promise<Expense[]> {
     });
     return expenses.map((expense) => mapExpense(expense));
   } catch {
-    return getDemoExpenses();
+    return [];
   }
 }
 
@@ -276,16 +259,24 @@ export async function createExpense(
   input: Omit<Expense, "id">,
   createdByUserId = 1,
 ): Promise<Expense> {
-  if (tenantId === DEMO_TENANT_ID) {
-    return createDemoExpense(input);
-  }
+  const { Expense, User } = await getDb();
 
-  const { Expense } = await getDb();
+  let authorId = createdByUserId;
+  if (!Number.isInteger(authorId) || authorId <= 0) {
+    const tenantUser = await User.findOne({ where: { tenantId }, order: [["id", "ASC"]] });
+    const fallbackUser = tenantUser ?? (await User.findOne({ order: [["id", "ASC"]] }));
+
+    if (!fallbackUser) {
+      throw new Error("Nenhum usuário encontrado para registrar a despesa.");
+    }
+
+    authorId = fallbackUser.id;
+  }
 
   const expense = await Expense.create({
     ...input,
     tenantId,
-    createdByUserId,
+    createdByUserId: authorId,
   });
 
   return mapExpense(expense);
@@ -295,11 +286,6 @@ export async function deleteExpense(
   tenantId: number,
   expenseId: string,
 ): Promise<void> {
-  if (tenantId === DEMO_TENANT_ID) {
-    deleteDemoExpense(expenseId);
-    return;
-  }
-
   const { Expense } = await getDb();
   const parsedId = Number(expenseId);
 

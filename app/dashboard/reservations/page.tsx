@@ -231,11 +231,11 @@ export default function ReservationsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Recepção Viva Mar</p>
             <h2 className="mt-3 text-3xl font-semibold text-white">Reservas</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              Esta aba cria reservas de verdade no banco do tenant usando a mesma camada de backend do sistema.
+              Gerencie todas as reservas da pousada. Crie novas reservas, acompanhe o status de cada hóspede e mantenha o calendário sempre atualizado.
             </p>
           </div>
           <div className="rounded-2xl border border-sky-400/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-            Gravação via API e validação automática de conflito.
+            Conflitos de datas são verificados automaticamente ao criar uma reserva.
           </div>
         </div>
         {error ? (
@@ -364,7 +364,7 @@ export default function ReservationsPage() {
         {isLoading || reservations.length > 0 ? (
           <article className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
             <h3 className="text-xl font-semibold text-white">Reservas recentes</h3>
-            <p className="mt-1 text-sm text-slate-400">Lista atualizada com o que já existe no banco do tenant.</p>
+            <p className="mt-1 text-sm text-slate-400">Reservas mais recentes da pousada.</p>
 
             <div className="mt-4 space-y-3">
               {isLoading ? (

@@ -3,7 +3,6 @@
 import { Op } from 'sequelize';
 import { getAuthenticatedSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { DEMO_TENANT_ID, createDemoManualReservation, getDemoReservations } from '@/services/demoData';
 import { createChannexBooking } from '@/services/channex/api';
 import type { Reservation } from '@/types/channex';
 
@@ -29,31 +28,6 @@ export async function createManualReservationAction(input: ManualReservationInpu
 
   if (!session) {
     throw new Error('Sessão inválida. Faça login novamente.');
-  }
-
-  if (session.tenantId === DEMO_TENANT_ID) {
-    const checkIn = new Date(input.checkIn);
-    const checkOut = new Date(input.checkOut);
-
-    if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
-      throw new Error('Período inválido para a reserva.');
-    }
-
-    const hasConflict = getDemoReservations().some((reservation) => {
-      if (reservation.roomId !== input.roomId || reservation.status === 'cancelled') {
-        return false;
-      }
-
-      const reservationCheckIn = new Date(reservation.checkIn);
-      const reservationCheckOut = new Date(reservation.checkOut);
-      return reservationCheckIn < checkOut && reservationCheckOut > checkIn;
-    });
-
-    if (hasConflict) {
-      throw new Error('Já existe uma reserva para este quarto neste período.');
-    }
-
-    return createDemoManualReservation(input);
   }
 
   const { Room, Reservation } = await getDb();
