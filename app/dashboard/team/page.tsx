@@ -373,7 +373,7 @@ export default function TeamPage() {
                   <button
                     type="button"
                     onClick={() => void runMemberAction(member.id, 'toggle-employment')}
-                    disabled={!canManage || busyMemberId === member.id}
+                    disabled={!canManage || member.isCurrentUser || busyMemberId === member.id}
                     className="rounded-xl border border-white/15 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     {member.employmentStatus === 'ativo' ? 'Inativar colaborador' : 'Reativar colaborador'}

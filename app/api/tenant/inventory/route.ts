@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAvailableRooms } from "@/services/tenantService";
+import { getAuthenticatedSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    const tenantId = 1; // Pousada Viva Mar
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
 
     const rooms = await getAvailableRooms(tenantId);
 

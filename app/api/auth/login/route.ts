@@ -29,7 +29,9 @@ export async function POST(request: Request) {
 
   if (body.email === DEMO_USER_EMAIL && body.password === DEMO_USER_PASSWORD) {
     const token = await createSessionToken({
-      userId: 1,
+      // O usuário demo não é um registro real da tabela users; usar id negativo
+      // evita colisão com colaboradores reais e marcação incorreta de "Você".
+      userId: -1,
       tenantId: DEMO_TENANT_ID,
       plan: 'premium',
       tenantName: DEMO_TENANT_NAME,

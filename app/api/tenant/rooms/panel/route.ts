@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { Op } from "sequelize";
+import { getAuthenticatedSession } from "@/lib/auth";
 
 type OperationalStatus =
   | "vacant"
@@ -58,7 +59,8 @@ function formatTime(date: Date): string {
 
 export async function GET() {
   try {
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const { Room, Reservation, RoomUnitStatus } = await getDb();
 
     const today = new Date().toISOString().slice(0, 10);

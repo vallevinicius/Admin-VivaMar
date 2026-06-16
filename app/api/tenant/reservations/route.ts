@@ -42,9 +42,8 @@ export async function PATCH(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    // Por enquanto forçamos o ID 1 (Pousada Viva Mar).
-    // Quando o login for ativado, pegaremos o ID do usuário logado.
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = resolveTenantId(session);
 
     const reservations = await getTenantReservations(tenantId);
 
@@ -106,9 +105,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  // O calendário atual carrega reservas do tenant fixo 1 em /api/tenant/inventory.
-  // Para manter consistência no F5, a exclusão também precisa atuar no mesmo tenant.
-  const tenantId = 1;
+  const session = await getAuthenticatedSession();
+  const tenantId = resolveTenantId(session);
 
   const body = (await request.json()) as { reservationId?: string };
   const reservationId = body.reservationId?.trim();

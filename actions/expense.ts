@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getAuthenticatedSession } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { createExpense, deleteExpense } from '@/services/tenantService';
 import type { ExpenseCategory } from '@/types/channex';
 
 type ExpenseInput = {
@@ -19,16 +19,28 @@ export async function createExpenseAction(input: ExpenseInput) {
     throw new Error('Sessão inválida.');
   }
 
-  const { Expense } = await getDb();
+  await createExpense(
+    session.tenantId,
+    {
+      description: input.description,
+      amount: input.amount,
+      date: input.date,
+      category: input.category,
+    },
+    session.userId,
+  );
 
-  await Expense.create({
-    tenantId: session.tenantId,
-    createdByUserId: session.userId,
-    description: input.description,
-    amount: input.amount,
-    date: input.date,
-    category: input.category,
-  });
+  revalidatePath('/dashboard/finance');
+}
+
+export async function deleteExpenseAction(expenseId: string) {
+  const session = await getAuthenticatedSession();
+
+  if (!session) {
+    throw new Error('Sessão inválida.');
+  }
+
+  await deleteExpense(session.tenantId, expenseId);
 
   revalidatePath('/dashboard/finance');
 }

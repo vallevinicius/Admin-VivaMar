@@ -30,6 +30,15 @@ async function ensureRoomAmenitiesColumn(models: DbModels) {
       comment: 'JSON array de comodidades',
     });
   }
+
+  if (!table.photo_urls) {
+    await models.sequelize.getQueryInterface().addColumn('rooms', 'photo_urls', {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'JSON array de URLs das fotos',
+    });
+  }
 }
 
 async function ensureUserTeamColumns(models: DbModels) {

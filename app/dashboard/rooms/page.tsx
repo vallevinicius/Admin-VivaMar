@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 
 import { BedDouble, Settings2, Plus, Trash2, CircleDollarSign, Save, X, Edit2 } from 'lucide-react';
 
@@ -26,8 +26,12 @@ type RoomData = {
   quantity: number;
   maxGuests: number;
   status: 'active' | 'maintenance';
-  amenities?: string;
+  amenities?: string | string[] | null;
+  amenitiesList?: string[];
+  photoUrls?: string[];
 };
+
+const MAX_PHOTOS_PER_ROOM = 8;
 
 function getSnapshotUnitNumber(snapshotId: string) {
   const lastUnderscore = snapshotId.lastIndexOf('_');
@@ -84,6 +88,8 @@ function roomStatusLabel(status: RoomOperationalStatus) {
 
 export default function RoomsPage() {
   const { showToast } = useToast();
+  const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const editPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [snapshots, setSnapshots] = useState<RoomSnapshot[]>([]);
   const [selectedSnapshotByGroup, setSelectedSnapshotByGroup] = useState<Record<string, string>>({});
   const [loadingSnapshots, setLoadingSnapshots] = useState(true);
@@ -105,6 +111,7 @@ export default function RoomsPage() {
     maxGuests: '2',
     selectedAmenities: [] as string[],
     customAmenities: '',
+    photoFiles: [] as File[],
   });
   const [editRoom, setEditRoom] = useState({
     name: '',
@@ -113,6 +120,8 @@ export default function RoomsPage() {
     maxGuests: '2',
     selectedAmenities: [] as string[],
     customAmenities: '',
+    existingPhotoUrls: [] as string[],
+    newPhotoFiles: [] as File[],
   });
 
   const PRESET_AMENITIES = [
@@ -151,6 +160,127 @@ export default function RoomsPage() {
     return `${reais.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${cents}`;
   };
 
+  const parseStringArray = (input: unknown) => {
+    if (Array.isArray(input)) {
+      return input
+        .map((item) => String(item).trim())
+        .filter((item) => item.length > 0);
+    }
+
+    if (typeof input !== 'string' || input.trim().length === 0) {
+      return [] as string[];
+    }
+
+    try {
+      const parsed = JSON.parse(input);
+      if (!Array.isArray(parsed)) {
+        return [] as string[];
+      }
+
+      return parsed
+        .map((item) => String(item).trim())
+        .filter((item) => item.length > 0);
+    } catch {
+      return input
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+    }
+  };
+
+  const selectCreatePhotos = (files: FileList | null) => {
+    if (!files) return;
+
+    const incoming = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    const availableSlots = MAX_PHOTOS_PER_ROOM - newRoom.photoFiles.length;
+    const accepted = incoming.slice(0, Math.max(availableSlots, 0));
+
+    if (accepted.length < incoming.length) {
+      showToast(`Limite de ${MAX_PHOTOS_PER_ROOM} fotos por quarto`);
+    }
+
+    setNewRoom((prev) => ({
+      ...prev,
+      photoFiles: [...prev.photoFiles, ...accepted],
+    }));
+
+    if (createPhotoInputRef.current) {
+      createPhotoInputRef.current.value = '';
+    }
+  };
+
+  const selectEditPhotos = (files: FileList | null) => {
+    if (!files) return;
+
+    const incoming = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    const usedSlots = editRoom.existingPhotoUrls.length + editRoom.newPhotoFiles.length;
+    const availableSlots = MAX_PHOTOS_PER_ROOM - usedSlots;
+    const accepted = incoming.slice(0, Math.max(availableSlots, 0));
+
+    if (accepted.length < incoming.length) {
+      showToast(`Limite de ${MAX_PHOTOS_PER_ROOM} fotos por quarto`);
+    }
+
+    setEditRoom((prev) => ({
+      ...prev,
+      newPhotoFiles: [...prev.newPhotoFiles, ...accepted],
+    }));
+
+    if (editPhotoInputRef.current) {
+      editPhotoInputRef.current.value = '';
+    }
+  };
+
+  const removeCreatePhoto = (index: number) => {
+    setNewRoom((prev) => ({
+      ...prev,
+      photoFiles: prev.photoFiles.filter((_, i) => i !== index),
+    }));
+  };
+
+  const removeExistingEditPhoto = (index: number) => {
+    setEditRoom((prev) => ({
+      ...prev,
+      existingPhotoUrls: prev.existingPhotoUrls.filter((_, i) => i !== index),
+    }));
+  };
+
+  const removeNewEditPhoto = (index: number) => {
+    setEditRoom((prev) => ({
+      ...prev,
+      newPhotoFiles: prev.newPhotoFiles.filter((_, i) => i !== index),
+    }));
+  };
+
+  const uploadRoomPhotos = async (files: File[], roomName: string) => {
+    if (files.length === 0) {
+      return [] as string[];
+    }
+
+    const normalizedRoomName = roomName.trim();
+    if (!normalizedRoomName) {
+      throw new Error('Nome do quarto é obrigatório para enviar fotos');
+    }
+
+    const formData = new FormData();
+    formData.append('roomName', normalizedRoomName);
+    for (const file of files) {
+      formData.append('photos', file);
+    }
+
+    const response = await fetch('/api/tenant/rooms/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Falha no upload das fotos');
+    }
+
+    return Array.isArray(payload.urls) ? payload.urls : [];
+  };
+
   const toggleAmenity = (amenity: string) => {
     setNewRoom((prev) => ({
       ...prev,
@@ -170,17 +300,11 @@ export default function RoomsPage() {
   };
 
   const openEditModal = (room: RoomData) => {
-    const currentAmenities = room.amenities || '[]';
-    let parsedAmenities: string[] = [];
-    try {
-      const parsed = JSON.parse(currentAmenities);
-      parsedAmenities = Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
-    } catch {
-      parsedAmenities = currentAmenities
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-    }
+    const parsedAmenities =
+      Array.isArray(room.amenitiesList) && room.amenitiesList.length > 0
+        ? room.amenitiesList
+        : parseStringArray(room.amenities);
+    const parsedPhotoUrls = Array.isArray(room.photoUrls) ? room.photoUrls : [];
 
     const selectedAmenities = Array.from(
       new Set(
@@ -205,6 +329,8 @@ export default function RoomsPage() {
       maxGuests: room.maxGuests.toString(),
       selectedAmenities,
       customAmenities,
+      existingPhotoUrls: parsedPhotoUrls,
+      newPhotoFiles: [],
     });
     setRoomBeingEdited(room.id);
     setEditAmenitiesTab('preset');
@@ -244,6 +370,14 @@ export default function RoomsPage() {
       return;
     }
 
+    let uploadedPhotoUrls: string[] = [];
+    try {
+      uploadedPhotoUrls = await uploadRoomPhotos(editRoom.newPhotoFiles, editRoom.name);
+    } catch (error: any) {
+      showToast(error?.message || 'Erro ao enviar fotos');
+      return;
+    }
+
     try {
       const res = await fetch(`/api/tenant/rooms/${roomBeingEdited}`, {
         method: 'PATCH',
@@ -260,6 +394,7 @@ export default function RoomsPage() {
               .map((a) => a.trim())
               .filter((a) => a)),
           ],
+          photoUrls: [...editRoom.existingPhotoUrls, ...uploadedPhotoUrls],
         }),
       });
 
@@ -422,6 +557,14 @@ export default function RoomsPage() {
       return;
     }
 
+    let uploadedPhotoUrls: string[] = [];
+    try {
+      uploadedPhotoUrls = await uploadRoomPhotos(newRoom.photoFiles, newRoom.name);
+    } catch (error: any) {
+      showToast(error?.message || 'Erro ao enviar fotos');
+      return;
+    }
+
     try {
       const res = await fetch('/api/tenant/rooms', {
         method: 'POST',
@@ -438,12 +581,13 @@ export default function RoomsPage() {
               .map((a) => a.trim())
               .filter((a) => a)),
           ],
+          photoUrls: uploadedPhotoUrls,
         }),
       });
 
       if (res.ok) {
         setIsModalOpen(false);
-        setNewRoom({ name: '', price: '', quantity: '1', maxGuests: '2', selectedAmenities: [], customAmenities: '' });
+        setNewRoom({ name: '', price: '', quantity: '1', maxGuests: '2', selectedAmenities: [], customAmenities: '', photoFiles: [] });
         fetchRooms();
         showToast('Quarto criado com sucesso!');
       } else {
@@ -688,11 +832,27 @@ export default function RoomsPage() {
                 key={room.id}
                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 transition-all hover:border-white/20"
               >
-                <div className="flex-1">
+                <div className="flex flex-1 items-center gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+                    {room.photoUrls?.[0] ? (
+                      <img
+                        src={room.photoUrls[0]}
+                        alt={`Foto do quarto ${room.name}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-wide text-slate-500">
+                        Sem foto
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1">
                   <p className="font-semibold text-slate-200">{room.name}</p>
                   <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">
                     Até {room.maxGuests} {room.maxGuests === 1 ? 'hóspede' : 'hóspedes'}
                   </p>
+                  </div>
                 </div>
 
                 {/* Preço */}
@@ -770,13 +930,13 @@ export default function RoomsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm sm:items-center"
           >
             <motion.div
               initial={{ opacity: 0, y: 24, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 18, scale: 0.98 }}
-              className="w-full max-w-md rounded-[30px] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40"
+              className="my-2 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[30px] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -795,7 +955,7 @@ export default function RoomsPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleCreateRoom} className="space-y-4">
+              <form onSubmit={handleCreateRoom} className="flex-1 space-y-4 overflow-y-auto pr-1">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-200">
                     Nome do Quarto
@@ -864,6 +1024,52 @@ export default function RoomsPage() {
                     className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                   />
                 </label>
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-slate-200">
+                    Fotos do Quarto
+                  </span>
+                  <input
+                    ref={createPhotoInputRef}
+                    id="create-room-photo-upload"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => selectCreatePhotos(e.target.files)}
+                    className="sr-only"
+                  />
+                  <label
+                    htmlFor="create-room-photo-upload"
+                    className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-sky-400/40 bg-slate-950/60 px-4 py-3 text-sm font-medium text-sky-200 transition hover:border-sky-300 hover:bg-sky-500/10"
+                  >
+                    Escolher fotos do computador
+                  </label>
+                  <p className="text-xs text-slate-500">
+                    Formatos aceitos: JPG, PNG, WEBP e GIF. Ate 5MB por arquivo.
+                  </p>
+                </div>
+
+                {newRoom.photoFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-400">
+                      Fotos selecionadas ({newRoom.photoFiles.length}/{MAX_PHOTOS_PER_ROOM}):
+                    </p>
+                    <div className="space-y-2">
+                      {newRoom.photoFiles.map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2">
+                          <span className="min-w-0 flex-1 truncate pr-3 text-xs text-slate-200">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeCreatePhoto(index)}
+                            className="rounded-lg border border-white/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-400/10"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* COMODIDADES */}
                 <div className="space-y-3 pt-4 border-t border-white/10">
@@ -955,7 +1161,7 @@ export default function RoomsPage() {
                   )}
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="sticky bottom-0 z-10 flex gap-3 border-t border-white/10 bg-slate-900 pt-4">
                   <button
                     type="submit"
                     className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500"
@@ -983,13 +1189,13 @@ export default function RoomsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm sm:items-center"
           >
             <motion.div
               initial={{ opacity: 0, y: 24, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 18, scale: 0.98 }}
-              className="w-full max-w-md rounded-[30px] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40"
+              className="my-2 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[30px] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -1008,7 +1214,7 @@ export default function RoomsPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleUpdateRoom} className="space-y-4">
+              <form onSubmit={handleUpdateRoom} className="flex-1 space-y-4 overflow-y-auto pr-1">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-200">
                     Nome do Quarto
@@ -1077,6 +1283,72 @@ export default function RoomsPage() {
                     className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                   />
                 </label>
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-slate-200">
+                    Adicionar Novas Fotos
+                  </span>
+                  <input
+                    ref={editPhotoInputRef}
+                    id="edit-room-photo-upload"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => selectEditPhotos(e.target.files)}
+                    className="sr-only"
+                  />
+                  <label
+                    htmlFor="edit-room-photo-upload"
+                    className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-sky-400/40 bg-slate-950/60 px-4 py-3 text-sm font-medium text-sky-200 transition hover:border-sky-300 hover:bg-sky-500/10"
+                  >
+                    Escolher fotos do computador
+                  </label>
+                  <p className="text-xs text-slate-500">
+                    Limite total: {MAX_PHOTOS_PER_ROOM} fotos por quarto.
+                  </p>
+                </div>
+
+                {editRoom.existingPhotoUrls.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-400">Fotos atuais:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {editRoom.existingPhotoUrls.map((url, index) => (
+                        <div key={`${url}-${index}`} className="space-y-1 rounded-xl border border-white/10 bg-slate-950/40 p-2">
+                          <img src={url} alt={`Foto ${index + 1}`} className="h-20 w-full rounded-lg object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeExistingEditPhoto(index)}
+                            className="w-full rounded-lg border border-white/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-400/10"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {editRoom.newPhotoFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-400">
+                      Novas fotos selecionadas ({editRoom.newPhotoFiles.length}):
+                    </p>
+                    <div className="space-y-2">
+                      {editRoom.newPhotoFiles.map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2">
+                          <span className="min-w-0 flex-1 truncate pr-3 text-xs text-slate-200">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeNewEditPhoto(index)}
+                            className="rounded-lg border border-white/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-400/10"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* COMODIDADES */}
                 <div className="space-y-3 pt-4 border-t border-white/10">
@@ -1168,7 +1440,7 @@ export default function RoomsPage() {
                   )}
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="sticky bottom-0 z-10 flex gap-3 border-t border-white/10 bg-slate-900 pt-4">
                   <button
                     type="submit"
                     className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500"

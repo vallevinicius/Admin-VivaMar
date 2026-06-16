@@ -1,12 +1,73 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getAuthenticatedSession } from "@/lib/auth";
+
+function sanitizeStringArray(input: unknown) {
+  if (!Array.isArray(input)) {
+    if (typeof input !== "string" || input.trim().length === 0) {
+      return [] as string[];
+    }
+
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) {
+        return Array.from(
+          new Set(
+            parsed
+              .map((item) => String(item ?? "").trim())
+              .filter((item) => item.length > 0),
+          ),
+        );
+      }
+    } catch {
+      return Array.from(
+        new Set(
+          input
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0),
+        ),
+      );
+    }
+
+    return [] as string[];
+  }
+
+  return Array.from(
+    new Set(
+      input
+        .map((item) => String(item ?? "").trim())
+        .filter((item) => item.length > 0),
+    ),
+  );
+}
+
+function parseStringArray(input: unknown) {
+  if (Array.isArray(input)) {
+    return input.map((item) => String(item)).filter((item) => item.length > 0);
+  }
+
+  if (typeof input !== "string" || input.trim().length === 0) {
+    return [] as string[];
+  }
+
+  try {
+    const parsed = JSON.parse(input);
+    return Array.isArray(parsed)
+      ? parsed.map((item) => String(item)).filter((item) => item.length > 0)
+      : [];
+  } catch {
+    return [] as string[];
+  }
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const resolvedParams = await params;
     const localRoomId = resolvedParams.id;
     const body = await request.json();
@@ -55,8 +116,14 @@ export async function PATCH(
       updates.maxGuests = nextMaxGuests;
     }
 
-    if (body.amenities !== undefined && Array.isArray(body.amenities)) {
-      updates.amenities = JSON.stringify(body.amenities);
+    if (body.amenities !== undefined) {
+      const amenities = sanitizeStringArray(body.amenities);
+      updates.amenities = amenities.length > 0 ? JSON.stringify(amenities) : null;
+    }
+
+    if (body.photoUrls !== undefined) {
+      const photoUrls = sanitizeStringArray(body.photoUrls);
+      updates.photoUrls = photoUrls.length > 0 ? JSON.stringify(photoUrls) : null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -75,6 +142,8 @@ export async function PATCH(
         price: Number(room.price),
         quantity: room.quantity,
         amenities: room.amenities,
+        amenitiesList: parseStringArray(room.amenities),
+        photoUrls: parseStringArray(room.photoUrls),
       },
       { status: 200 },
     );
@@ -89,7 +158,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const resolvedParams = await params;
     const localRoomId = resolvedParams.id;
 

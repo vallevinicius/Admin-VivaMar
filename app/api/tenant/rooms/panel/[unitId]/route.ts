@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getAuthenticatedSession } from "@/lib/auth";
 
 const VALID_STATUSES = [
   "vacant",
@@ -16,7 +17,8 @@ export async function PATCH(
   { params }: { params: Promise<{ unitId: string }> }
 ) {
   try {
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const resolvedParams = await params;
     const unitId = resolvedParams.unitId;
 

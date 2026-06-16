@@ -8,7 +8,9 @@ export type Room = {
   price: number;
   quantity: number;
   status: "active" | "maintenance";
-  amenities?: string | null;
+  amenities?: string | string[] | null;
+  amenitiesList?: string[];
+  photoUrls?: string[];
 };
 
 export type ReservationStatus =

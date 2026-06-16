@@ -1,10 +1,52 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getAuthenticatedSession } from "@/lib/auth";
 import { getRooms } from "@/services/tenantService";
+
+function sanitizeStringArray(input: unknown) {
+  if (!Array.isArray(input)) {
+    if (typeof input !== "string" || input.trim().length === 0) {
+      return [] as string[];
+    }
+
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) {
+        return Array.from(
+          new Set(
+            parsed
+              .map((item) => String(item ?? "").trim())
+              .filter((item) => item.length > 0),
+          ),
+        );
+      }
+    } catch {
+      return Array.from(
+        new Set(
+          input
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0),
+        ),
+      );
+    }
+
+    return [] as string[];
+  }
+
+  return Array.from(
+    new Set(
+      input
+        .map((item) => String(item ?? "").trim())
+        .filter((item) => item.length > 0),
+    ),
+  );
+}
 
 export async function GET() {
   try {
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const rooms = await getRooms(tenantId);
 
     return NextResponse.json(rooms, { status: 200 });
@@ -26,14 +68,16 @@ function slugifyRoomName(name: string) {
 
 export async function POST(request: Request) {
   try {
-    const tenantId = 1;
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const body = await request.json();
 
     const name = String(body.name ?? "").trim();
     const price = Number(body.price);
     const quantity = Number(body.quantity);
     const maxGuests = Number(body.maxGuests);
-    const amenities = Array.isArray(body.amenities) ? body.amenities : [];
+    const amenities = sanitizeStringArray(body.amenities);
+    const photoUrls = sanitizeStringArray(body.photoUrls);
 
     if (!name) {
       return NextResponse.json({ error: "Nome do quarto é obrigatório" }, { status: 400 });
@@ -51,7 +95,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Capacidade deve ser um número inteiro maior que zero" }, { status: 400 });
     }
 
-    const { Room } = await getDb();
+    const { Room, Tenant } = await getDb();
+
+    await Tenant.findOrCreate({
+      where: { id: tenantId },
+      defaults: {
+        name: session?.tenantName ?? `Tenant ${tenantId}`,
+        plan: session?.plan ?? "basic",
+        status: "active",
+      },
+    });
 
     const localPrefix = slugifyRoomName(name) || "quarto";
     const uniqueSuffix = Date.now().toString(36);
@@ -67,6 +120,7 @@ export async function POST(request: Request) {
       maxGuests,
       status: "active",
       amenities: amenities.length > 0 ? JSON.stringify(amenities) : null,
+      photoUrls: photoUrls.length > 0 ? JSON.stringify(photoUrls) : null,
     });
 
     return NextResponse.json(
@@ -79,6 +133,7 @@ export async function POST(request: Request) {
         price: Number(room.price),
         quantity: room.quantity,
         amenities: amenities,
+        photoUrls,
       },
       { status: 201 },
     );

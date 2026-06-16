@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import {
   DEMO_TENANT_ID,
   createDemoExpense,
+  deleteDemoExpense,
   deleteDemoReservation,
   getDemoExpenses,
   getDemoReservations,
@@ -16,9 +17,36 @@ import {
 } from "@/services/channex/api";
 import { Op } from "sequelize";
 
+function parseJsonArray(input: unknown) {
+  if (Array.isArray(input)) {
+    return input.map((item) => String(item).trim()).filter((item) => item.length > 0);
+  }
+
+  if (typeof input !== "string" || input.trim().length === 0) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(input);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((item) => String(item).trim()).filter((item) => item.length > 0);
+  } catch {
+    return input
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+}
+
 function mapRoom(
   room: InstanceType<Awaited<ReturnType<typeof getDb>>["Room"]>,
 ): Room {
+  const amenitiesList = parseJsonArray(room.amenities);
+  const photoUrls = parseJsonArray(room.photoUrls);
+
   return {
     id: room.localRoomId,
     channexRoomTypeId: room.channexRoomTypeId,
@@ -28,6 +56,8 @@ function mapRoom(
     price: Number(room.price),
     quantity: room.quantity,
     amenities: room.amenities,
+    amenitiesList,
+    photoUrls,
   };
 }
 
@@ -122,10 +152,6 @@ export async function getReservations(
 }
 
 export async function getRooms(tenantId: number): Promise<Room[]> {
-  if (tenantId === DEMO_TENANT_ID) {
-    return getDemoRooms();
-  }
-
   try {
     const { Room } = await getDb();
     const rooms = await Room.findAll({
@@ -133,9 +159,21 @@ export async function getRooms(tenantId: number): Promise<Room[]> {
       order: [["name", "ASC"]],
     });
 
-    return rooms.map((room) => mapRoom(room));
+    if (rooms.length > 0) {
+      return rooms.map((room) => mapRoom(room));
+    }
+
+    if (tenantId === DEMO_TENANT_ID) {
+      return getDemoRooms();
+    }
+
+    return [];
   } catch {
-    return getDemoRooms();
+    if (tenantId === DEMO_TENANT_ID) {
+      return getDemoRooms();
+    }
+
+    return [];
   }
 }
 
@@ -236,6 +274,7 @@ export async function getExpenses(tenantId: number): Promise<Expense[]> {
 export async function createExpense(
   tenantId: number,
   input: Omit<Expense, "id">,
+  createdByUserId = 1,
 ): Promise<Expense> {
   if (tenantId === DEMO_TENANT_ID) {
     return createDemoExpense(input);
@@ -246,10 +285,38 @@ export async function createExpense(
   const expense = await Expense.create({
     ...input,
     tenantId,
-    createdByUserId: 1,
+    createdByUserId,
   });
 
   return mapExpense(expense);
+}
+
+export async function deleteExpense(
+  tenantId: number,
+  expenseId: string,
+): Promise<void> {
+  if (tenantId === DEMO_TENANT_ID) {
+    deleteDemoExpense(expenseId);
+    return;
+  }
+
+  const { Expense } = await getDb();
+  const parsedId = Number(expenseId);
+
+  if (!Number.isInteger(parsedId)) {
+    throw new Error("Despesa inválida.");
+  }
+
+  const deletedCount = await Expense.destroy({
+    where: {
+      tenantId,
+      id: parsedId,
+    },
+  });
+
+  if (deletedCount === 0) {
+    throw new Error("Despesa não encontrada para este tenant.");
+  }
 }
 
 export async function getUnifiedInventory(tenantId: number) {

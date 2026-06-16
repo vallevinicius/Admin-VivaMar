@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getAuthenticatedSession } from "@/lib/auth";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await getAuthenticatedSession();
+    const tenantId = session?.tenantId ?? 1;
     const { Room } = await getDb();
     const body = await request.json();
     const resolvedParams = await params;
     const roomId = resolvedParams.id; // Ex: 'vm-standard'
 
     const room = await Room.findOne({
-      where: { localRoomId: roomId, tenantId: 1 },
+      where: { localRoomId: roomId, tenantId },
     });
 
     if (!room)

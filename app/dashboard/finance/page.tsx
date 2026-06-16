@@ -1,4 +1,5 @@
 import { Landmark } from 'lucide-react';
+import { ExpenseDeleteButton } from '@/components/expense-delete-button';
 import { ExpenseModalForm } from '@/components/expense-modal-form';
 import { getAuthenticatedSession } from '@/lib/auth';
 import { getExpenses, getReservations } from '@/services/tenantService';
@@ -84,6 +85,7 @@ export default async function FinancePage() {
                   <th className="px-5 py-4 font-medium">Categoria</th>
                   <th className="px-5 py-4 font-medium">Data</th>
                   <th className="px-5 py-4 text-right font-medium">Valor</th>
+                  <th className="px-5 py-4 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10 bg-slate-900/50">
@@ -94,11 +96,14 @@ export default async function FinancePage() {
                       <td className="px-5 py-4 text-slate-300">{expense.category}</td>
                       <td className="px-5 py-4 text-slate-300">{formatLongDate(expense.date)}</td>
                       <td className="px-5 py-4 text-right font-semibold text-rose-300">{formatCurrency(expense.amount)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <ExpenseDeleteButton expenseId={expense.id} description={expense.description} />
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-5 py-10 text-center text-slate-400">
+                    <td colSpan={5} className="px-5 py-10 text-center text-slate-400">
                       Sua operação ainda não registrou despesas.
                     </td>
                   </tr>

@@ -150,3 +150,7 @@ export function createDemoExpense(input: Omit<Expense, 'id'>): Expense {
   demoExpenses = [expense, ...demoExpenses];
   return structuredClone(expense);
 }
+
+export function deleteDemoExpense(expenseId: string): void {
+  demoExpenses = demoExpenses.filter((item) => item.id !== expenseId);
+}

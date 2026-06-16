@@ -10,6 +10,7 @@ export type RoomAttributes = {
   maxGuests: number;
   status: "active" | "maintenance";
   amenities?: string | null;
+  photoUrls?: string | null;
   tenantId: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -33,6 +34,7 @@ export class Room
   declare maxGuests: number;
   declare status: "active" | "maintenance";
   declare amenities: string | null;
+  declare photoUrls: string | null;
   declare tenantId: number;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
@@ -87,6 +89,13 @@ export class Room
           allowNull: true,
           defaultValue: null,
           comment: "JSON array de comodidades",
+        },
+        photoUrls: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          defaultValue: null,
+          field: "photo_urls",
+          comment: "JSON array de URLs das fotos",
         },
         tenantId: {
           type: DataTypes.INTEGER.UNSIGNED,
