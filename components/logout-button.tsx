@@ -31,7 +31,7 @@ export function LogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={loading}
-      className="inline-flex items-center gap-2 rounded-xl border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200 transition hover:border-rose-300/40 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+      className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-300/30 dark:bg-rose-500/10 dark:text-rose-200 dark:hover:border-rose-300/40 dark:hover:bg-rose-500/20"
     >
       <LogOut className="h-4 w-4" />
       {loading ? 'Saindo...' : 'Sair'}
