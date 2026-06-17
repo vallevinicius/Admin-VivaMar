@@ -5,6 +5,7 @@ import { getAuthenticatedSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { createChannexBooking } from '@/services/channex/api';
 import type { Reservation } from '@/types/channex';
+import { differenceInNights, findBlockingClosure, getRoomMinimumStay } from '@/lib/room-policies';
 
 
 function shouldCreateInChannex() {
@@ -23,15 +24,31 @@ type ManualReservationInput = {
   notes: string;
 };
 
-export async function createManualReservationAction(input: ManualReservationInput): Promise<Reservation> {
-  const session = await getAuthenticatedSession();
+type ReservationCreationContext = ManualReservationInput & {
+  tenantId: number;
+  createdByUserId?: number | null;
+};
 
-  if (!session) {
-    throw new Error('Sessão inválida. Faça login novamente.');
+function parseStoredPolicyArray(input: unknown) {
+  if (Array.isArray(input)) {
+    return input;
   }
 
+  if (typeof input !== 'string' || input.trim().length === 0) {
+    return [] as unknown[];
+  }
+
+  try {
+    const parsed = JSON.parse(input);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as unknown[];
+  }
+}
+
+async function createReservationWithRules(input: ReservationCreationContext): Promise<Reservation> {
   const { Room, Reservation } = await getDb();
-  const room = await Room.findOne({ where: { tenantId: session.tenantId, localRoomId: input.roomId } });
+  const room = await Room.findOne({ where: { tenantId: input.tenantId, localRoomId: input.roomId } });
 
   if (!room) {
     throw new Error('Quarto não encontrado para o tenant.');
@@ -44,9 +61,32 @@ export async function createManualReservationAction(input: ManualReservationInpu
     throw new Error('Período inválido para a reserva.');
   }
 
+  const roomPolicy = {
+    minStayNights: room.minStayNights,
+    minStayDays: room.minStayDays,
+    seasonalRates: parseStoredPolicyArray(room.seasonalRates),
+    closurePeriods: parseStoredPolicyArray(room.closurePeriods),
+  };
+
+  const minimumStay = getRoomMinimumStay(roomPolicy, checkIn);
+  const stayLength = differenceInNights(checkIn, checkOut);
+
+  if (minimumStay.nights > 0 && stayLength < minimumStay.nights) {
+    throw new Error(`Este quarto exige pelo menos ${minimumStay.nights} noites.`);
+  }
+
+  if (minimumStay.days > 0 && stayLength < minimumStay.days) {
+    throw new Error(`Este quarto exige pelo menos ${minimumStay.days} dias.`);
+  }
+
+  const blockingClosure = findBlockingClosure(roomPolicy, checkIn, checkOut);
+  if (blockingClosure) {
+    throw new Error('Este quarto está fechado ou bloqueado para o período informado.');
+  }
+
   const conflict = await Reservation.findOne({
     where: {
-      tenantId: session.tenantId,
+      tenantId: input.tenantId,
       roomId: room.id,
       status: { [Op.ne]: 'cancelled' },
       checkIn: { [Op.lt]: checkOut },
@@ -118,7 +158,7 @@ export async function createManualReservationAction(input: ManualReservationInpu
 
   const created = await Reservation.create({
     roomId: room.id,
-    tenantId: session.tenantId,
+    tenantId: input.tenantId,
     channexReservationId: `manual_${Date.now()}`,
     otaSource: 'manual',
     checkIn: checkIn.toISOString(),
@@ -131,6 +171,7 @@ export async function createManualReservationAction(input: ManualReservationInpu
     guestEmail: input.guestEmail,
     guestPhone: input.guestPhone,
     notes: input.notes,
+    createdByUserId: input.createdByUserId ?? null,
   });
 
   return {
@@ -150,4 +191,22 @@ export async function createManualReservationAction(input: ManualReservationInpu
     },
     notes: created.notes,
   };
+}
+
+export async function createManualReservationAction(input: ManualReservationInput): Promise<Reservation> {
+  const session = await getAuthenticatedSession();
+
+  if (!session) {
+    throw new Error('Sessão inválida. Faça login novamente.');
+  }
+
+  return createReservationWithRules({
+    ...input,
+    tenantId: session.tenantId,
+    createdByUserId: session.userId ?? null,
+  });
+}
+
+export async function createPublicReservation(input: Omit<ReservationCreationContext, 'tenantId'> & { tenantId: number }) {
+  return createReservationWithRules(input);
 }

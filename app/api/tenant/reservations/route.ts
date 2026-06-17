@@ -65,15 +65,16 @@ export async function POST(request: Request) {
       guestEmail?: string;
       guestPhone?: string;
       notes?: string;
+      entryType?: 'manual_reservation' | 'blocked';
     };
 
     if (
       !body.roomId ||
       !body.checkIn ||
       !body.checkOut ||
-      !body.guestName ||
-      !body.guestEmail ||
-      !body.guestPhone
+      (!body.guestName && body.entryType !== 'blocked') ||
+      (!body.guestEmail && body.entryType !== 'blocked') ||
+      (!body.guestPhone && body.entryType !== 'blocked')
     ) {
       return NextResponse.json({ message: "Preencha os campos obrigatórios da reserva." }, { status: 400 });
     }
@@ -82,11 +83,11 @@ export async function POST(request: Request) {
       roomId: body.roomId,
       checkIn: body.checkIn,
       checkOut: body.checkOut,
-      entryType: "manual_reservation",
+      entryType: body.entryType ?? "manual_reservation",
       amount: Number(body.amount ?? 0),
-      guestName: body.guestName,
-      guestEmail: body.guestEmail,
-      guestPhone: body.guestPhone,
+      guestName: body.guestName ?? "Bloqueio Operacional",
+      guestEmail: body.guestEmail ?? "",
+      guestPhone: body.guestPhone ?? "",
       notes: body.notes ?? "",
     });
 

@@ -1,11 +1,31 @@
 export type OtaSource = "booking" | "expedia" | "hotels_com" | "manual";
 
+export type RoomSeasonalRate = {
+  label?: string;
+  startMonthDay: string;
+  endMonthDay: string;
+  price: number;
+  minStayNights?: number | null;
+  minStayDays?: number | null;
+};
+
+export type RoomClosurePeriod = {
+  label?: string;
+  startDate: string;
+  endDate: string;
+  kind?: "blocked" | "closed";
+};
+
 export type Room = {
   id: string;
   channexRoomTypeId: string;
   name: string;
   maxGuests: number;
   price: number;
+  minStayNights?: number | null;
+  minStayDays?: number | null;
+  seasonalRates?: RoomSeasonalRate[];
+  closurePeriods?: RoomClosurePeriod[];
   quantity: number;
   status: "active" | "maintenance";
   amenities?: string | string[] | null;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthenticatedSession } from "@/lib/auth";
+import { parseMaybeNumber, parseRoomPolicyArray, type RoomClosurePeriod, type RoomSeasonalRate } from "@/lib/room-policies";
 
 function sanitizeStringArray(input: unknown) {
   if (!Array.isArray(input)) {
@@ -40,6 +41,63 @@ function sanitizeStringArray(input: unknown) {
         .filter((item) => item.length > 0),
     ),
   );
+}
+
+function sanitizeSeasonalRates(input: unknown): RoomSeasonalRate[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const startMonthDay = String(item.startMonthDay ?? item.start_month_day ?? "").trim();
+    const endMonthDay = String(item.endMonthDay ?? item.end_month_day ?? "").trim();
+    const price = Number(item.price ?? item.rate ?? item.value);
+
+    if (!startMonthDay || !endMonthDay || !Number.isFinite(price) || price < 0) {
+      return null;
+    }
+
+    return {
+      label: String(item.label ?? "").trim() || undefined,
+      startMonthDay,
+      endMonthDay,
+      price,
+      minStayNights: parseMaybeNumber(item.minStayNights ?? item.min_stay_nights),
+      minStayDays: parseMaybeNumber(item.minStayDays ?? item.min_stay_days),
+    };
+  });
+}
+
+function sanitizeClosurePeriods(input: unknown): RoomClosurePeriod[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const startDate = String(item.startDate ?? item.start_date ?? "").trim();
+    const endDate = String(item.endDate ?? item.end_date ?? "").trim();
+    const kind = String(item.kind ?? "blocked").trim();
+
+    if (!startDate || !endDate) {
+      return null;
+    }
+
+    return {
+      label: String(item.label ?? "").trim() || undefined,
+      startDate,
+      endDate,
+      kind: kind === "closed" ? "closed" : "blocked",
+    };
+  });
+}
+
+function parseStoredPolicyArray<T>(input: unknown): T[] {
+  if (Array.isArray(input)) {
+    return input as T[];
+  }
+
+  if (typeof input !== "string" || input.trim().length === 0) {
+    return [] as T[];
+  }
+
+  try {
+    const parsed = JSON.parse(input);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [] as T[];
+  }
 }
 
 function parseStringArray(input: unknown) {
@@ -100,6 +158,14 @@ export async function PATCH(
       updates.price = nextPrice;
     }
 
+    if (body.minStayNights !== undefined) {
+      updates.minStayNights = parseMaybeNumber(body.minStayNights);
+    }
+
+    if (body.minStayDays !== undefined) {
+      updates.minStayDays = parseMaybeNumber(body.minStayDays);
+    }
+
     if (body.quantity !== undefined) {
       const nextQuantity = Number(body.quantity);
       if (!Number.isInteger(nextQuantity) || nextQuantity < 1) {
@@ -126,6 +192,16 @@ export async function PATCH(
       updates.photoUrls = photoUrls.length > 0 ? JSON.stringify(photoUrls) : null;
     }
 
+    if (body.seasonalRates !== undefined) {
+      const seasonalRates = sanitizeSeasonalRates(body.seasonalRates);
+      updates.seasonalRates = seasonalRates.length > 0 ? JSON.stringify(seasonalRates) : null;
+    }
+
+    if (body.closurePeriods !== undefined) {
+      const closurePeriods = sanitizeClosurePeriods(body.closurePeriods);
+      updates.closurePeriods = closurePeriods.length > 0 ? JSON.stringify(closurePeriods) : null;
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "Nenhum campo válido para atualizar" }, { status: 400 });
     }
@@ -140,10 +216,14 @@ export async function PATCH(
         maxGuests: room.maxGuests,
         status: room.status,
         price: Number(room.price),
+        minStayNights: room.minStayNights,
+        minStayDays: room.minStayDays,
         quantity: room.quantity,
         amenities: room.amenities,
         amenitiesList: parseStringArray(room.amenities),
         photoUrls: parseStringArray(room.photoUrls),
+        seasonalRates: parseStoredPolicyArray<RoomSeasonalRate>(room.seasonalRates),
+        closurePeriods: parseStoredPolicyArray<RoomClosurePeriod>(room.closurePeriods),
       },
       { status: 200 },
     );

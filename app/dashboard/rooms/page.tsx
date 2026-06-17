@@ -7,6 +7,7 @@ import { BedDouble, Settings2, Plus, Trash2, CircleDollarSign, Save, X, Edit2 } 
 import { useToast } from '@/components/toast-provider';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import type { RoomClosurePeriod, RoomSeasonalRate } from '@/lib/room-policies';
 
 type RoomOperationalStatus = 'vacant' | 'cleaning' | 'awaiting_guest' | 'maintenance' | 'occupied';
 
@@ -23,6 +24,10 @@ type RoomData = {
   id: string;
   name: string;
   price: number;
+  minStayNights?: number | null;
+  minStayDays?: number | null;
+  seasonalRates?: RoomSeasonalRate[];
+  closurePeriods?: RoomClosurePeriod[];
   quantity: number;
   maxGuests: number;
   status: 'active' | 'maintenance';
@@ -107,19 +112,27 @@ export default function RoomsPage() {
   const [newRoom, setNewRoom] = useState({
     name: '',
     price: '',
+    minStayNights: '',
+    minStayDays: '',
     quantity: '1',
     maxGuests: '2',
     selectedAmenities: [] as string[],
     customAmenities: '',
+    seasonalRatesJson: '[]',
+    closurePeriodsJson: '[]',
     photoFiles: [] as File[],
   });
   const [editRoom, setEditRoom] = useState({
     name: '',
     price: '',
+    minStayNights: '',
+    minStayDays: '',
     quantity: '1',
     maxGuests: '2',
     selectedAmenities: [] as string[],
     customAmenities: '',
+    seasonalRatesJson: '[]',
+    closurePeriodsJson: '[]',
     existingPhotoUrls: [] as string[],
     newPhotoFiles: [] as File[],
   });
@@ -186,6 +199,13 @@ export default function RoomsPage() {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
     }
+  };
+
+  const parseJsonArray = <T,>(input: string) => {
+    if (!input.trim()) return [] as T[];
+
+    const parsed = JSON.parse(input);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
   };
 
   const selectCreatePhotos = (files: FileList | null) => {
@@ -325,11 +345,15 @@ export default function RoomsPage() {
     setEditRoom({
       name: room.name,
       price: (room.price * 100).toString(),
+      minStayNights: room.minStayNights?.toString() ?? '',
+      minStayDays: room.minStayDays?.toString() ?? '',
       quantity: room.quantity.toString(),
       maxGuests: room.maxGuests.toString(),
       selectedAmenities,
       customAmenities,
       existingPhotoUrls: parsedPhotoUrls,
+      seasonalRatesJson: JSON.stringify(room.seasonalRates ?? [], null, 2),
+      closurePeriodsJson: JSON.stringify(room.closurePeriods ?? [], null, 2),
       newPhotoFiles: [],
     });
     setRoomBeingEdited(room.id);
@@ -352,6 +376,8 @@ export default function RoomsPage() {
 
     const priceInCents = parseInt(editRoom.price, 10);
     const price = priceInCents / 100;
+    const minStayNights = editRoom.minStayNights ? parseInt(editRoom.minStayNights, 10) : null;
+    const minStayDays = editRoom.minStayDays ? parseInt(editRoom.minStayDays, 10) : null;
     const quantity = parseInt(editRoom.quantity, 10);
     const maxGuests = parseInt(editRoom.maxGuests, 10);
 
@@ -370,6 +396,17 @@ export default function RoomsPage() {
       return;
     }
 
+    let seasonalRates: RoomSeasonalRate[] = [];
+    let closurePeriods: RoomClosurePeriod[] = [];
+
+    try {
+      seasonalRates = parseJsonArray<RoomSeasonalRate>(editRoom.seasonalRatesJson);
+      closurePeriods = parseJsonArray<RoomClosurePeriod>(editRoom.closurePeriodsJson);
+    } catch {
+      showToast('As regras sazonais e os bloqueios precisam estar em JSON válido');
+      return;
+    }
+
     let uploadedPhotoUrls: string[] = [];
     try {
       uploadedPhotoUrls = await uploadRoomPhotos(editRoom.newPhotoFiles, editRoom.name);
@@ -385,6 +422,8 @@ export default function RoomsPage() {
         body: JSON.stringify({
           name: editRoom.name.trim(),
           price,
+          minStayNights,
+          minStayDays,
           quantity,
           maxGuests,
           amenities: [
@@ -395,6 +434,8 @@ export default function RoomsPage() {
               .filter((a) => a)),
           ],
           photoUrls: [...editRoom.existingPhotoUrls, ...uploadedPhotoUrls],
+          seasonalRates,
+          closurePeriods,
         }),
       });
 
@@ -539,6 +580,8 @@ export default function RoomsPage() {
 
     const priceInCents = parseInt(newRoom.price, 10);
     const price = priceInCents / 100;
+    const minStayNights = newRoom.minStayNights ? parseInt(newRoom.minStayNights, 10) : null;
+    const minStayDays = newRoom.minStayDays ? parseInt(newRoom.minStayDays, 10) : null;
     const quantity = parseInt(newRoom.quantity, 10);
     const maxGuests = parseInt(newRoom.maxGuests, 10);
 
@@ -557,6 +600,17 @@ export default function RoomsPage() {
       return;
     }
 
+    let seasonalRates: RoomSeasonalRate[] = [];
+    let closurePeriods: RoomClosurePeriod[] = [];
+
+    try {
+      seasonalRates = parseJsonArray<RoomSeasonalRate>(newRoom.seasonalRatesJson);
+      closurePeriods = parseJsonArray<RoomClosurePeriod>(newRoom.closurePeriodsJson);
+    } catch {
+      showToast('As regras sazonais e os bloqueios precisam estar em JSON válido');
+      return;
+    }
+
     let uploadedPhotoUrls: string[] = [];
     try {
       uploadedPhotoUrls = await uploadRoomPhotos(newRoom.photoFiles, newRoom.name);
@@ -572,6 +626,8 @@ export default function RoomsPage() {
         body: JSON.stringify({
           name: newRoom.name.trim(),
           price,
+          minStayNights,
+          minStayDays,
           quantity,
           maxGuests,
           amenities: [
@@ -582,12 +638,26 @@ export default function RoomsPage() {
               .filter((a) => a)),
           ],
           photoUrls: uploadedPhotoUrls,
+          seasonalRates,
+          closurePeriods,
         }),
       });
 
       if (res.ok) {
         setIsModalOpen(false);
-        setNewRoom({ name: '', price: '', quantity: '1', maxGuests: '2', selectedAmenities: [], customAmenities: '', photoFiles: [] });
+        setNewRoom({
+          name: '',
+          price: '',
+          minStayNights: '',
+          minStayDays: '',
+          quantity: '1',
+          maxGuests: '2',
+          selectedAmenities: [],
+          customAmenities: '',
+          seasonalRatesJson: '[]',
+          closurePeriodsJson: '[]',
+          photoFiles: [],
+        });
         fetchRooms();
         showToast('Quarto criado com sucesso!');
       } else {
@@ -852,6 +922,20 @@ export default function RoomsPage() {
                   <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">
                     Até {room.maxGuests} {room.maxGuests === 1 ? 'hóspede' : 'hóspedes'}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                    <span className="rounded-full border border-white/10 px-2 py-1">
+                      Mín. noites: {room.minStayNights ?? '-'}
+                    </span>
+                    <span className="rounded-full border border-white/10 px-2 py-1">
+                      Mín. dias: {room.minStayDays ?? '-'}
+                    </span>
+                    <span className="rounded-full border border-white/10 px-2 py-1">
+                      Tarifas: {room.seasonalRates?.length ?? 0}
+                    </span>
+                    <span className="rounded-full border border-white/10 px-2 py-1">
+                      Bloqueios: {room.closurePeriods?.length ?? 0}
+                    </span>
+                  </div>
                   </div>
                 </div>
 
@@ -992,6 +1076,20 @@ export default function RoomsPage() {
 
                   <label className="block">
                     <span className="text-sm font-medium text-slate-200">
+                      Mínimo de noites
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={newRoom.minStayNights}
+                      onChange={(e) => setNewRoom({ ...newRoom, minStayNights: e.target.value })}
+                      className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-200">
                       Quantidade
                     </span>
                     <input
@@ -1006,7 +1104,47 @@ export default function RoomsPage() {
                       className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                     />
                   </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-200">
+                      Mínimo de dias
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={newRoom.minStayDays}
+                      onChange={(e) => setNewRoom({ ...newRoom, minStayDays: e.target.value })}
+                      className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                    />
+                  </label>
                 </div>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-200">
+                    Tarifas sazonais em JSON
+                  </span>
+                  <textarea
+                    rows={5}
+                    value={newRoom.seasonalRatesJson}
+                    onChange={(e) => setNewRoom({ ...newRoom, seasonalRatesJson: e.target.value })}
+                    placeholder='[{"label":"Verão","startMonthDay":"12-20","endMonthDay":"02-28","price":580,"minStayNights":3}]'
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-200">
+                    Bloqueios e fechamentos em JSON
+                  </span>
+                  <textarea
+                    rows={5}
+                    value={newRoom.closurePeriodsJson}
+                    onChange={(e) => setNewRoom({ ...newRoom, closurePeriodsJson: e.target.value })}
+                    placeholder='[{"label":"Manutenção","startDate":"2026-08-01","endDate":"2026-08-05","kind":"blocked"}]'
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                  />
+                </label>
 
                 <label className="block">
                   <span className="text-sm font-medium text-slate-200">
@@ -1251,6 +1389,20 @@ export default function RoomsPage() {
 
                   <label className="block">
                     <span className="text-sm font-medium text-slate-200">
+                      Mínimo de noites
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={editRoom.minStayNights}
+                      onChange={(e) => setEditRoom({ ...editRoom, minStayNights: e.target.value })}
+                      className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-200">
                       Quantidade
                     </span>
                     <input
@@ -1265,7 +1417,47 @@ export default function RoomsPage() {
                       className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                     />
                   </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-200">
+                      Mínimo de dias
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={editRoom.minStayDays}
+                      onChange={(e) => setEditRoom({ ...editRoom, minStayDays: e.target.value })}
+                      className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                    />
+                  </label>
                 </div>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-200">
+                    Tarifas sazonais em JSON
+                  </span>
+                  <textarea
+                    rows={5}
+                    value={editRoom.seasonalRatesJson}
+                    onChange={(e) => setEditRoom({ ...editRoom, seasonalRatesJson: e.target.value })}
+                    placeholder='[{"label":"Alta temporada","startMonthDay":"12-20","endMonthDay":"02-28","price":580,"minStayNights":3}]'
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-200">
+                    Bloqueios e fechamentos em JSON
+                  </span>
+                  <textarea
+                    rows={5}
+                    value={editRoom.closurePeriodsJson}
+                    onChange={(e) => setEditRoom({ ...editRoom, closurePeriodsJson: e.target.value })}
+                    placeholder='[{"label":"Fechamento anual","startDate":"2026-08-01","endDate":"2026-08-05","kind":"closed"}]'
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                  />
+                </label>
 
                 <label className="block">
                   <span className="text-sm font-medium text-slate-200">

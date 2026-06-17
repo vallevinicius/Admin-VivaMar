@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAvailableRooms } from "@/services/tenantService";
+import { createPublicReservation } from "@/actions/reservation";
 
 function removeInternalRoomFields(room: Record<string, unknown>) {
   const { channexRoomTypeId: _channexRoomTypeId, ...publicRoom } = room;
@@ -35,7 +36,6 @@ export async function GET(request: Request) {
 // 2. POST: Cria a reserva vinda da Landing Page
 export async function POST(request: Request) {
   const body = await request.json();
-  const { Reservation, Room } = await getDb();
 
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -44,33 +44,17 @@ export async function POST(request: Request) {
   };
 
   try {
-    const room = await Room.findOne({
-      where: { localRoomId: body.roomId, tenantId: 1 },
-    });
-
-    if (!room) {
-      return NextResponse.json(
-        { error: "Quarto não encontrado" },
-        { status: 404, headers: corsHeaders },
-      );
-    }
-
-    const novaReserva = await Reservation.create({
+    const novaReserva = await createPublicReservation({
       tenantId: 1,
-      roomId: room.id,
-      channexReservationId: `site-direto-${Date.now()}`,
-      otaSource: "manual",
+      roomId: body.roomId,
+      checkIn: body.checkIn,
+      checkOut: body.checkOut,
+      entryType: "manual_reservation",
+      amount: Number(body.amount ?? 0),
       guestName: body.guestName,
       guestEmail: body.guestEmail,
       guestPhone: body.guestPhone,
-      guestCpf: body.guestCpf,
-      checkIn: body.checkIn,
-      checkOut: body.checkOut,
-      status: "confirmed",
-      channelReference: "website-direto",
-      amount: body.amount,
-      currency: "BRL",
-      notes: body.notes,
+      notes: body.notes ?? "",
       createdByUserId: null,
     });
 

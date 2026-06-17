@@ -6,6 +6,10 @@ export type RoomAttributes = {
   channexRoomTypeId: string;
   name: string;
   price: number;
+  minStayNights?: number | null;
+  minStayDays?: number | null;
+  seasonalRates?: string | null;
+  closurePeriods?: string | null;
   quantity: number;
   maxGuests: number;
   status: "active" | "maintenance";
@@ -30,6 +34,10 @@ export class Room
   declare channexRoomTypeId: string;
   declare name: string;
   declare price: number;
+  declare minStayNights: number | null;
+  declare minStayDays: number | null;
+  declare seasonalRates: string | null;
+  declare closurePeriods: string | null;
   declare quantity: number;
   declare maxGuests: number;
   declare status: "active" | "maintenance";
@@ -67,6 +75,32 @@ export class Room
           type: DataTypes.DECIMAL(12, 2),
           allowNull: false,
           defaultValue: 0,
+        },
+        minStayNights: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          defaultValue: null,
+          field: "min_stay_nights",
+        },
+        minStayDays: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          defaultValue: null,
+          field: "min_stay_days",
+        },
+        seasonalRates: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          defaultValue: null,
+          field: "seasonal_rates",
+          comment: "JSON array com períodos e preços sazonais",
+        },
+        closurePeriods: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          defaultValue: null,
+          field: "closure_periods",
+          comment: "JSON array com períodos de bloqueio/fechamento",
         },
         quantity: {
           type: DataTypes.INTEGER.UNSIGNED,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthenticatedSession } from "@/lib/auth";
 import { getRooms } from "@/services/tenantService";
+import { parseRoomPolicyArray, parseMaybeNumber, type RoomClosurePeriod, type RoomSeasonalRate } from "@/lib/room-policies";
 
 function sanitizeStringArray(input: unknown) {
   if (!Array.isArray(input)) {
@@ -43,6 +44,46 @@ function sanitizeStringArray(input: unknown) {
   );
 }
 
+function sanitizeSeasonalRates(input: unknown): RoomSeasonalRate[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const startMonthDay = String(item.startMonthDay ?? item.start_month_day ?? "").trim();
+    const endMonthDay = String(item.endMonthDay ?? item.end_month_day ?? "").trim();
+    const price = Number(item.price ?? item.rate ?? item.value);
+
+    if (!startMonthDay || !endMonthDay || !Number.isFinite(price) || price < 0) {
+      return null;
+    }
+
+    return {
+      label: String(item.label ?? "").trim() || undefined,
+      startMonthDay,
+      endMonthDay,
+      price,
+      minStayNights: parseMaybeNumber(item.minStayNights ?? item.min_stay_nights),
+      minStayDays: parseMaybeNumber(item.minStayDays ?? item.min_stay_days),
+    };
+  });
+}
+
+function sanitizeClosurePeriods(input: unknown): RoomClosurePeriod[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const startDate = String(item.startDate ?? item.start_date ?? "").trim();
+    const endDate = String(item.endDate ?? item.end_date ?? "").trim();
+    const kind = String(item.kind ?? "blocked").trim();
+
+    if (!startDate || !endDate) {
+      return null;
+    }
+
+    return {
+      label: String(item.label ?? "").trim() || undefined,
+      startDate,
+      endDate,
+      kind: kind === "closed" ? "closed" : "blocked",
+    };
+  });
+}
+
 export async function GET() {
   try {
     const session = await getAuthenticatedSession();
@@ -76,8 +117,12 @@ export async function POST(request: Request) {
     const price = Number(body.price);
     const quantity = Number(body.quantity);
     const maxGuests = Number(body.maxGuests);
+    const minStayNights = parseMaybeNumber(body.minStayNights);
+    const minStayDays = parseMaybeNumber(body.minStayDays);
     const amenities = sanitizeStringArray(body.amenities);
     const photoUrls = sanitizeStringArray(body.photoUrls);
+    const seasonalRates = sanitizeSeasonalRates(body.seasonalRates);
+    const closurePeriods = sanitizeClosurePeriods(body.closurePeriods);
 
     if (!name) {
       return NextResponse.json({ error: "Nome do quarto é obrigatório" }, { status: 400 });
@@ -116,11 +161,15 @@ export async function POST(request: Request) {
       channexRoomTypeId: `local-${localRoomId}`,
       name,
       price,
+      minStayNights,
+      minStayDays,
       quantity,
       maxGuests,
       status: "active",
       amenities: amenities.length > 0 ? JSON.stringify(amenities) : null,
       photoUrls: photoUrls.length > 0 ? JSON.stringify(photoUrls) : null,
+      seasonalRates: seasonalRates.length > 0 ? JSON.stringify(seasonalRates) : null,
+      closurePeriods: closurePeriods.length > 0 ? JSON.stringify(closurePeriods) : null,
     });
 
     return NextResponse.json(
@@ -131,9 +180,13 @@ export async function POST(request: Request) {
         maxGuests: room.maxGuests,
         status: room.status,
         price: Number(room.price),
+        minStayNights: room.minStayNights,
+        minStayDays: room.minStayDays,
         quantity: room.quantity,
         amenities: amenities,
         photoUrls,
+        seasonalRates,
+        closurePeriods,
       },
       { status: 201 },
     );

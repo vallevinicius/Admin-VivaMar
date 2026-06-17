@@ -41,6 +41,7 @@ type FormState = {
   checkOut: string;
   amount: string;
   notes: string;
+  entryType: 'manual_reservation' | 'blocked';
 };
 
 const INITIAL_FORM: FormState = {
@@ -52,6 +53,7 @@ const INITIAL_FORM: FormState = {
   checkOut: '',
   amount: '',
   notes: '',
+  entryType: 'manual_reservation',
 };
 
 function formatDateLabel(value: string) {
@@ -169,6 +171,11 @@ export default function ReservationsPage() {
     setSuccess(null);
 
     if (!form.roomId || !form.guestName || !form.guestEmail || !form.guestPhone || !form.checkIn || !form.checkOut) {
+      if (form.entryType === 'blocked' && (!form.roomId || !form.checkIn || !form.checkOut)) {
+        setError('Preencha quarto e período para continuar.');
+        return;
+      }
+
       setError('Preencha quarto, hóspede e período para continuar.');
       return;
     }
@@ -188,13 +195,14 @@ export default function ReservationsPage() {
         },
         body: JSON.stringify({
           roomId: form.roomId,
-          guestName: form.guestName,
-          guestEmail: form.guestEmail,
-          guestPhone: form.guestPhone,
+          guestName: form.entryType === 'blocked' ? 'Bloqueio Operacional' : form.guestName,
+          guestEmail: form.entryType === 'blocked' ? '' : form.guestEmail,
+          guestPhone: form.entryType === 'blocked' ? '' : form.guestPhone,
           checkIn: form.checkIn,
           checkOut: form.checkOut,
           amount: Number(form.amount || '0'),
           notes: form.notes,
+          entryType: form.entryType,
         }),
       });
 
@@ -214,6 +222,7 @@ export default function ReservationsPage() {
         checkOut: '',
         amount: '',
         notes: '',
+          entryType: 'manual_reservation',
       });
       setSuccess('Reserva criada com sucesso no banco de dados.');
     } catch (submitError) {
@@ -235,7 +244,7 @@ export default function ReservationsPage() {
             </p>
           </div>
           <div className="rounded-2xl border border-sky-400/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-            Conflitos de datas são verificados automaticamente ao criar uma reserva.
+            Conflitos de datas, bloqueios futuros e mínimo de estadia são verificados automaticamente.
           </div>
         </div>
         {error ? (
@@ -282,6 +291,15 @@ export default function ReservationsPage() {
 
           <div className="mt-4 grid gap-2">
             <select
+              value={form.entryType}
+              onChange={(event) => setForm((current) => ({ ...current, entryType: event.target.value as FormState['entryType'] }))}
+              className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
+            >
+              <option value="manual_reservation">Reserva manual</option>
+              <option value="blocked">Bloqueio operacional</option>
+            </select>
+
+            <select
               value={form.roomId}
               onChange={(event) => setForm((current) => ({ ...current, roomId: event.target.value }))}
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
@@ -298,7 +316,7 @@ export default function ReservationsPage() {
             <input
               value={form.guestName}
               onChange={(event) => setForm((current) => ({ ...current, guestName: event.target.value }))}
-              required
+              required={form.entryType !== 'blocked'}
               placeholder="Nome do hóspede"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />
@@ -306,14 +324,14 @@ export default function ReservationsPage() {
               type="email"
               value={form.guestEmail}
               onChange={(event) => setForm((current) => ({ ...current, guestEmail: event.target.value }))}
-              required
+              required={form.entryType !== 'blocked'}
               placeholder="E-mail do hóspede"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />
             <input
               value={form.guestPhone}
               onChange={(event) => setForm((current) => ({ ...current, guestPhone: event.target.value }))}
-              required
+              required={form.entryType !== 'blocked'}
               placeholder="Telefone"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />

@@ -10,6 +10,15 @@ import {
   fetchChannexRoomTypes,
 } from "@/services/channex/api";
 import { Op } from "sequelize";
+import {
+  differenceInNights,
+  findBlockingClosure,
+  getRoomEffectivePrice,
+  getRoomMinimumStay,
+  parseRoomPolicyArray,
+  type RoomClosurePeriod,
+  type RoomSeasonalRate,
+} from "@/lib/room-policies";
 
 function parseJsonArray(input: unknown) {
   if (Array.isArray(input)) {
@@ -35,11 +44,57 @@ function parseJsonArray(input: unknown) {
   }
 }
 
+function parseSeasonalRates(input: unknown): RoomSeasonalRate[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const startMonthDay = String(item.startMonthDay ?? item.start_month_day ?? "").trim();
+    const endMonthDay = String(item.endMonthDay ?? item.end_month_day ?? "").trim();
+    const price = Number(item.price ?? item.value ?? item.tariff ?? item.rate);
+
+    if (!startMonthDay || !endMonthDay || !Number.isFinite(price) || price < 0) {
+      return null;
+    }
+
+    return {
+      label: String(item.label ?? "").trim() || undefined,
+      startMonthDay,
+      endMonthDay,
+      price,
+      minStayNights: Number.isFinite(Number(item.minStayNights ?? item.min_stay_nights))
+        ? Number(item.minStayNights ?? item.min_stay_nights)
+        : null,
+      minStayDays: Number.isFinite(Number(item.minStayDays ?? item.min_stay_days))
+        ? Number(item.minStayDays ?? item.min_stay_days)
+        : null,
+    };
+  });
+}
+
+function parseClosurePeriods(input: unknown): RoomClosurePeriod[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const startDate = String(item.startDate ?? item.start_date ?? "").trim();
+    const endDate = String(item.endDate ?? item.end_date ?? "").trim();
+    const kind = String(item.kind ?? "blocked").trim() as RoomClosurePeriod["kind"];
+
+    if (!startDate || !endDate) {
+      return null;
+    }
+
+    return {
+      label: String(item.label ?? "").trim() || undefined,
+      startDate,
+      endDate,
+      kind: kind === "closed" ? "closed" : "blocked",
+    };
+  });
+}
+
 function mapRoom(
   room: InstanceType<Awaited<ReturnType<typeof getDb>>["Room"]>,
 ): Room {
   const amenitiesList = parseJsonArray(room.amenities);
   const photoUrls = parseJsonArray(room.photoUrls);
+  const seasonalRates = parseSeasonalRates(room.seasonalRates);
+  const closurePeriods = parseClosurePeriods(room.closurePeriods);
 
   return {
     id: room.localRoomId,
@@ -48,6 +103,10 @@ function mapRoom(
     maxGuests: room.maxGuests,
     status: room.status,
     price: Number(room.price),
+    minStayNights: room.minStayNights ?? null,
+    minStayDays: room.minStayDays ?? null,
+    seasonalRates,
+    closurePeriods,
     quantity: room.quantity,
     amenities: room.amenities,
     amenitiesList,
@@ -353,6 +412,7 @@ export async function getAvailableRooms(
   if (!checkIn || !checkOut) {
     return allRooms.map((room) => ({
       ...mapRoom(room),
+      price: getRoomEffectivePrice(mapRoom(room), undefined),
       remainingQuantity: room.quantity,
     }));
   }
@@ -360,7 +420,7 @@ export async function getAvailableRooms(
   const reservations = await Reservation.findAll({
     where: {
       tenantId,
-      status: "confirmed",
+      status: { [Op.ne]: "cancelled" },
       [Op.or]: [
         { checkIn: { [Op.lt]: checkOut }, checkOut: { [Op.gt]: checkIn } },
       ],
@@ -368,14 +428,23 @@ export async function getAvailableRooms(
   });
 
   return allRooms.map((room) => {
-    const occupiedCount = reservations.filter(
-      (res) => res.roomId === room.id,
-    ).length;
+    const roomData = mapRoom(room);
+    const matchingReservations = reservations.filter((res) => res.roomId === room.id);
+    const occupiedCount = matchingReservations.length;
     const remaining = room.quantity - occupiedCount;
+    const minimumStay = getRoomMinimumStay(roomData, checkIn);
+    const stayLength = differenceInNights(checkIn, checkOut);
+    const closure = findBlockingClosure(roomData, checkIn, checkOut);
+    const isShortStay =
+      (minimumStay.nights > 0 && stayLength < minimumStay.nights) ||
+      (minimumStay.days > 0 && stayLength < minimumStay.days);
+
+    const effectivePrice = getRoomEffectivePrice(roomData, checkIn);
 
     return {
-      ...mapRoom(room),
-      remainingQuantity: remaining,
+      ...roomData,
+      price: effectivePrice,
+      remainingQuantity: closure || isShortStay ? 0 : remaining,
     };
   });
 }
