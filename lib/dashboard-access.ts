@@ -2,6 +2,7 @@ import type { Route } from 'next';
 
 export type DashboardFeatureKey =
   | 'calendar'
+  | 'calendar_management'
   | 'promotions'
   | 'reservations'
   | 'check'
@@ -25,6 +26,12 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     href: '/dashboard/calendar',
     label: 'Calendario',
     description: 'Operacao e moderacao de reservas',
+  },
+  {
+    key: 'calendar_management',
+    href: '/dashboard/calendar-management',
+    label: 'Calendario de gestao',
+    description: 'Fechamento de quartos e ajuste de tarifa',
   },
   {
     key: 'promotions',
@@ -76,6 +83,7 @@ const FEATURE_BY_KEY = new Map(
 
 export const DEFAULT_STAFF_FEATURES: DashboardFeatureKey[] = [
   'calendar',
+  'calendar_management',
   'reservations',
   'check',
   'rooms',
