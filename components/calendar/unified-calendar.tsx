@@ -85,6 +85,7 @@ type ManualEntryForm = {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
+  guestCpf: string;
   notes: string;
 };
 
@@ -113,6 +114,7 @@ const initialManualForm: ManualEntryForm = {
   guestName: "",
   guestEmail: "",
   guestPhone: "",
+  guestCpf: "",
   notes: "",
 };
 
@@ -306,6 +308,7 @@ export function UnifiedCalendar() {
       guestName: "",
       guestEmail: "",
       guestPhone: "",
+      guestCpf: "",
       notes: "",
     });
     setFormError(null);
@@ -334,14 +337,26 @@ export function UnifiedCalendar() {
     event.preventDefault();
     setFormError(null);
 
-    if (
-      !manualForm.roomId ||
-      !manualForm.checkIn ||
-      !manualForm.checkOut ||
-      !manualForm.guestName
-    ) {
-      setFormError("Preencha quarto e período para continuar.");
-      return;
+    if (manualForm.entryType === "blocked") {
+      if (!manualForm.roomId || !manualForm.checkIn || !manualForm.checkOut) {
+        setFormError("Preencha quarto e período para continuar.");
+        return;
+      }
+    } else {
+      if (
+        !manualForm.roomId ||
+        !manualForm.checkIn ||
+        !manualForm.checkOut ||
+        !manualForm.guestName ||
+        !manualForm.guestEmail ||
+        !manualForm.guestPhone ||
+        !manualForm.guestCpf ||
+        !manualForm.amount ||
+        !manualForm.notes
+      ) {
+        setFormError("Na reserva manual, todos os campos são obrigatórios.");
+        return;
+      }
     }
 
     if (manualForm.checkOut <= manualForm.checkIn) {
@@ -353,6 +368,11 @@ export function UnifiedCalendar() {
 
     try {
       const amount = parseCurrencyInput(manualForm.amount || "0");
+      if (manualForm.entryType === "manual_reservation" && amount <= 0) {
+        setFormError("Informe um valor total maior que zero.");
+        return;
+      }
+
       const createdReservation = await createManualReservationAction({
         roomId: manualForm.roomId,
         checkIn: new Date(manualForm.checkIn).toISOString(),
@@ -362,6 +382,7 @@ export function UnifiedCalendar() {
         guestName: manualForm.guestName,
         guestEmail: manualForm.guestEmail,
         guestPhone: manualForm.guestPhone,
+        guestCpf: manualForm.guestCpf,
         notes: manualForm.notes,
       });
       setReservations((current) => [...current, createdReservation]);
@@ -661,6 +682,7 @@ export function UnifiedCalendar() {
                           checkIn: event.target.value,
                         }))
                       }
+                      required
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none"
                     />
                   </label>
@@ -678,6 +700,7 @@ export function UnifiedCalendar() {
                           checkOut: event.target.value,
                         }))
                       }
+                      required
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none"
                     />
                   </label>
@@ -697,6 +720,7 @@ export function UnifiedCalendar() {
                           guestName: event.target.value,
                         }))
                       }
+                      required={manualForm.entryType === "manual_reservation"}
                       placeholder="Ex.: Marina Carvalho"
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                     />
@@ -714,6 +738,7 @@ export function UnifiedCalendar() {
                           amount: formatCurrencyInput(event.target.value),
                         }))
                       }
+                      required={manualForm.entryType === "manual_reservation"}
                       placeholder="Ex.: R$ 1.280,00"
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                     />
@@ -734,6 +759,7 @@ export function UnifiedCalendar() {
                           guestEmail: event.target.value,
                         }))
                       }
+                      required={manualForm.entryType === "manual_reservation"}
                       placeholder="Ex.: marina@email.com"
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                     />
@@ -751,11 +777,31 @@ export function UnifiedCalendar() {
                           guestPhone: event.target.value,
                         }))
                       }
+                      required={manualForm.entryType === "manual_reservation"}
                       placeholder="Ex.: +55 81 99999-9999"
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                     />
                   </label>
                 </div>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-slate-200">
+                    CPF
+                  </span>
+                  <input
+                    type="text"
+                    value={manualForm.guestCpf}
+                    onChange={(event) =>
+                      setManualForm((current) => ({
+                        ...current,
+                        guestCpf: event.target.value,
+                      }))
+                    }
+                    required={manualForm.entryType === "manual_reservation"}
+                    placeholder="Ex.: 123.456.789-10"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                  />
+                </label>
 
                 <label className="block">
                   <span className="mb-2 block text-sm font-medium text-slate-200">
@@ -770,6 +816,7 @@ export function UnifiedCalendar() {
                         notes: event.target.value,
                       }))
                     }
+                    required={manualForm.entryType === "manual_reservation"}
                     placeholder="Ex.: Chegada prevista para 15h30."
                     className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                   />

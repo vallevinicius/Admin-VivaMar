@@ -137,6 +137,7 @@ function mapReservation(
       name: reservation.guestName,
       email: reservation.guestEmail,
       phone: reservation.guestPhone,
+      cpf: reservation.guestCpf ?? undefined,
     },
     notes: reservation.notes,
   };
@@ -269,6 +270,7 @@ export async function updateReservation(
     guestName: updatedReservation.customer.name,
     guestEmail: updatedReservation.customer.email,
     guestPhone: updatedReservation.customer.phone,
+    guestCpf: updatedReservation.customer.cpf ?? null,
     notes: updatedReservation.notes,
   });
 

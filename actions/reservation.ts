@@ -21,6 +21,7 @@ type ManualReservationInput = {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
+  guestCpf?: string;
   notes: string;
 };
 
@@ -46,8 +47,23 @@ function parseStoredPolicyArray(input: unknown) {
   }
 }
 
+function normalizeCpf(input: string | undefined): string | null {
+  const raw = (input ?? '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  const digitsOnly = raw.replace(/\D/g, '');
+  if (digitsOnly.length !== 11) {
+    throw new Error('CPF inválido. Informe 11 dígitos.');
+  }
+
+  return digitsOnly;
+}
+
 async function createReservationWithRules(input: ReservationCreationContext): Promise<Reservation> {
   const { Room, Reservation } = await getDb();
+  const normalizedCpf = normalizeCpf(input.guestCpf);
   const room = await Room.findOne({ where: { tenantId: input.tenantId, localRoomId: input.roomId } });
 
   if (!room) {
@@ -152,6 +168,7 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
         name: input.guestName,
         email: input.guestEmail,
         phone: input.guestPhone,
+        cpf: normalizedCpf ?? undefined,
       },
     };
   }
@@ -170,6 +187,7 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
     guestName: input.guestName,
     guestEmail: input.guestEmail,
     guestPhone: input.guestPhone,
+    guestCpf: normalizedCpf,
     notes: input.notes,
     createdByUserId: input.createdByUserId ?? null,
   });
@@ -188,6 +206,7 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
       name: created.guestName,
       email: created.guestEmail,
       phone: created.guestPhone,
+      cpf: (created.guestCpf as string | null) ?? undefined,
     },
     notes: created.notes,
   };
@@ -198,6 +217,22 @@ export async function createManualReservationAction(input: ManualReservationInpu
 
   if (!session) {
     throw new Error('Sessão inválida. Faça login novamente.');
+  }
+
+  if (input.entryType === 'manual_reservation') {
+    if (
+      !input.roomId ||
+      !input.checkIn ||
+      !input.checkOut ||
+      !input.guestName ||
+      !input.guestEmail ||
+      !input.guestPhone ||
+      !input.guestCpf ||
+      input.amount <= 0 ||
+      !input.notes
+    ) {
+      throw new Error('Na reserva manual, todos os campos são obrigatórios.');
+    }
   }
 
   return createReservationWithRules({

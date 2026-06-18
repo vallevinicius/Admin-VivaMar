@@ -37,6 +37,7 @@ type FormState = {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
+  guestCpf: string;
   checkIn: string;
   checkOut: string;
   amount: string;
@@ -49,6 +50,7 @@ const INITIAL_FORM: FormState = {
   guestName: '',
   guestEmail: '',
   guestPhone: '',
+  guestCpf: '',
   checkIn: '',
   checkOut: '',
   amount: '',
@@ -170,14 +172,26 @@ export default function ReservationsPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.roomId || !form.guestName || !form.guestEmail || !form.guestPhone || !form.checkIn || !form.checkOut) {
-      if (form.entryType === 'blocked' && (!form.roomId || !form.checkIn || !form.checkOut)) {
+    if (form.entryType === 'blocked') {
+      if (!form.roomId || !form.checkIn || !form.checkOut) {
         setError('Preencha quarto e período para continuar.');
         return;
       }
-
-      setError('Preencha quarto, hóspede e período para continuar.');
-      return;
+    } else {
+      if (
+        !form.roomId ||
+        !form.guestName ||
+        !form.guestEmail ||
+        !form.guestPhone ||
+        !form.guestCpf ||
+        !form.checkIn ||
+        !form.checkOut ||
+        !form.amount ||
+        !form.notes
+      ) {
+        setError('Na reserva manual, todos os campos são obrigatórios.');
+        return;
+      }
     }
 
     if (form.checkOut <= form.checkIn) {
@@ -198,6 +212,7 @@ export default function ReservationsPage() {
           guestName: form.entryType === 'blocked' ? 'Bloqueio Operacional' : form.guestName,
           guestEmail: form.entryType === 'blocked' ? '' : form.guestEmail,
           guestPhone: form.entryType === 'blocked' ? '' : form.guestPhone,
+          guestCpf: form.entryType === 'blocked' ? '' : form.guestCpf,
           checkIn: form.checkIn,
           checkOut: form.checkOut,
           amount: Number(form.amount || '0'),
@@ -218,6 +233,7 @@ export default function ReservationsPage() {
         guestName: '',
         guestEmail: '',
         guestPhone: '',
+        guestCpf: '',
         checkIn: '',
         checkOut: '',
         amount: '',
@@ -335,6 +351,13 @@ export default function ReservationsPage() {
               placeholder="Telefone"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />
+            <input
+              value={form.guestCpf}
+              onChange={(event) => setForm((current) => ({ ...current, guestCpf: event.target.value }))}
+              required={form.entryType !== 'blocked'}
+              placeholder="CPF"
+              className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
+            />
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="date"
@@ -357,6 +380,7 @@ export default function ReservationsPage() {
               step="0.01"
               value={form.amount}
               onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
+              required={form.entryType !== 'blocked'}
               placeholder="Valor total"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />
@@ -364,6 +388,7 @@ export default function ReservationsPage() {
               value={form.notes}
               onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
               rows={3}
+              required={form.entryType !== 'blocked'}
               placeholder="Observações"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />

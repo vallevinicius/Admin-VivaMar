@@ -54,6 +54,7 @@ export async function POST(request: Request) {
       guestName: body.guestName,
       guestEmail: body.guestEmail,
       guestPhone: body.guestPhone,
+      guestCpf: body.guestCpf,
       notes: body.notes ?? "",
       createdByUserId: null,
     });

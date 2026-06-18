@@ -64,30 +64,42 @@ export async function POST(request: Request) {
       guestName?: string;
       guestEmail?: string;
       guestPhone?: string;
+      guestCpf?: string;
       notes?: string;
       entryType?: 'manual_reservation' | 'blocked';
     };
 
-    if (
-      !body.roomId ||
-      !body.checkIn ||
-      !body.checkOut ||
-      (!body.guestName && body.entryType !== 'blocked') ||
-      (!body.guestEmail && body.entryType !== 'blocked') ||
-      (!body.guestPhone && body.entryType !== 'blocked')
-    ) {
+    const entryType = body.entryType ?? 'manual_reservation';
+
+    if (!body.roomId || !body.checkIn || !body.checkOut) {
       return NextResponse.json({ message: "Preencha os campos obrigatórios da reserva." }, { status: 400 });
+    }
+
+    if (
+      entryType === 'manual_reservation' &&
+      (!body.guestName ||
+        !body.guestEmail ||
+        !body.guestPhone ||
+        !body.guestCpf ||
+        Number(body.amount ?? 0) <= 0 ||
+        !body.notes)
+    ) {
+      return NextResponse.json(
+        { message: 'Na reserva manual, todos os campos são obrigatórios.' },
+        { status: 400 },
+      );
     }
 
     const reservation = await createManualReservationAction({
       roomId: body.roomId,
       checkIn: body.checkIn,
       checkOut: body.checkOut,
-      entryType: body.entryType ?? "manual_reservation",
+      entryType,
       amount: Number(body.amount ?? 0),
       guestName: body.guestName ?? "Bloqueio Operacional",
       guestEmail: body.guestEmail ?? "",
       guestPhone: body.guestPhone ?? "",
+      guestCpf: body.guestCpf ?? "",
       notes: body.notes ?? "",
     });
 
