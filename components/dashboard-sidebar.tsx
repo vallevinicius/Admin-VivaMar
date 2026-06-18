@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,8 +12,10 @@ import {
   ClipboardCheck,
   History,
   Landmark,
+  Menu,
   PanelLeftClose,
   UsersRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,9 +45,10 @@ export function DashboardSidebar({
   navItems: NavItem[];
 }) {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  return (
-    <aside className="h-fit self-start rounded-[28px] border border-slate-200/80 bg-white/85 p-5 shadow-xl shadow-slate-200/70 backdrop-blur dark:border-white/10 dark:bg-slate-900/85 dark:shadow-2xl dark:shadow-slate-950/30">
+  const navContent = (
+    <>
       <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 pb-5 dark:border-white/10">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-600 dark:text-sky-300">
@@ -72,6 +76,7 @@ export function DashboardSidebar({
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setMobileOpen(false)}
               className={cn(
                 "block rounded-[24px] border px-4 py-4 transition-all",
                 isActive
@@ -99,6 +104,51 @@ export function DashboardSidebar({
           );
         })}
       </nav>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Barra com hambúrguer — todas as telas */}
+      <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/85">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-sky-600 dark:text-sky-300">
+            Pousada Viva Mar
+          </p>
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{tenantName}</p>
+        </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="rounded-xl border border-slate-200 bg-slate-100 p-2.5 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-700/70"
+          aria-label="Abrir menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Drawer */}
+      {mobileOpen && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Painel lateral */}
+          <aside className="fixed inset-y-0 left-0 z-50 w-80 overflow-y-auto rounded-r-[28px] border-r border-slate-200/80 bg-white/95 p-5 shadow-2xl shadow-slate-900/20 backdrop-blur dark:border-white/10 dark:bg-slate-900/95 dark:shadow-slate-950/50">
+            <div className="mb-4 flex justify-end">
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="rounded-xl border border-slate-200 bg-slate-100 p-2 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-700/70"
+                aria-label="Fechar menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {navContent}
+          </aside>
+        </>
+      )}
+    </>
   );
 }

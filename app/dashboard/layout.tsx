@@ -24,12 +24,14 @@ export default async function DashboardLayout({
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-      <div className="mx-auto grid max-w-7xl gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <DashboardSidebar tenantName={session.tenantName} navItems={navItems} />
-        <section className="min-w-0 space-y-4">
-          <div className="flex justify-end">
-            <LogoutButton />
+      <div className="mx-auto max-w-7xl space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <DashboardSidebar tenantName={session.tenantName} navItems={navItems} />
           </div>
+          <LogoutButton />
+        </div>
+        <section className="min-w-0 space-y-4">
           {children}
         </section>
       </div>
