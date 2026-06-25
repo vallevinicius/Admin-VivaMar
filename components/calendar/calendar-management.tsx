@@ -40,6 +40,24 @@ function overlapsRange(
   return reservationStart < endExclusive && reservationEnd > start;
 }
 
+const WEEK_PRESETS = [
+  { label: "Natal", startMonthDay: "12-23", endMonthDay: "12-29", endNextYear: false },
+  { label: "Réveillon", startMonthDay: "12-30", endMonthDay: "01-05", endNextYear: true },
+  { label: "Tiradentes", startMonthDay: "04-19", endMonthDay: "04-25", endNextYear: false },
+  { label: "Festa Junina", startMonthDay: "06-19", endMonthDay: "06-25", endNextYear: false },
+  { label: "N. Sra. Aparecida", startMonthDay: "10-10", endMonthDay: "10-16", endNextYear: false },
+  { label: "Finados", startMonthDay: "11-01", endMonthDay: "11-07", endNextYear: false },
+] as const;
+
+function getNextYearOccurrence(monthDay: string, fromDate: Date): string {
+  const year = fromDate.getFullYear();
+  const candidate = `${year}-${monthDay}`;
+  if (parseDateOnly(candidate) >= fromDate) {
+    return candidate;
+  }
+  return `${year + 1}-${monthDay}`;
+}
+
 function getDayState(day: Date, dayReservations: Reservation[]) {
   const start = new Date(day);
   const end = addDays(start, 1);
@@ -69,6 +87,7 @@ export function CalendarManagement() {
   const [savingBlock, setSavingBlock] = useState(false);
   const [savingPrice, setSavingPrice] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+  const [savingWeekRate, setSavingWeekRate] = useState(false);
 
   const today = useMemo(() => new Date(), []);
   const todayDate = useMemo(() => toDateInputValue(today), [today]);
@@ -80,6 +99,11 @@ export function CalendarManagement() {
   const [blockStart, setBlockStart] = useState(toDateInputValue(addDays(today, 1)));
   const [blockEnd, setBlockEnd] = useState(toDateInputValue(addDays(today, 2)));
   const [newPrice, setNewPrice] = useState("");
+  const [priceSpecificDate, setPriceSpecificDate] = useState(toDateInputValue(addDays(today, 1)));
+  const [weekRateStart, setWeekRateStart] = useState(toDateInputValue(addDays(today, 1)));
+  const [weekRateEnd, setWeekRateEnd] = useState(toDateInputValue(addDays(today, 7)));
+  const [weekRatePrice, setWeekRatePrice] = useState("");
+  const [weekRateLabel, setWeekRateLabel] = useState("");
   const [rateStartDate, setRateStartDate] = useState(
     toDateInputValue(addDays(today, 1)),
   );
@@ -247,6 +271,81 @@ export function CalendarManagement() {
     );
   }
 
+  function handleApplyWeekPreset(preset: (typeof WEEK_PRESETS)[number]) {
+    const startDate = getNextYearOccurrence(preset.startMonthDay, today);
+    const startYear = Number(startDate.slice(0, 4));
+    const endYear = preset.endNextYear ? startYear + 1 : startYear;
+    setWeekRateStart(startDate);
+    setWeekRateEnd(`${endYear}-${preset.endMonthDay}`);
+    setWeekRateLabel(preset.label);
+  }
+
+  async function handleSaveWeekRate() {
+    if (!selectedRoomId) {
+      showToast("Selecione um quarto para alterar a tarifa.");
+      return;
+    }
+
+    if (!weekRateStart || !weekRateEnd || weekRateEnd < weekRateStart) {
+      showToast("Período de semana inválido.");
+      return;
+    }
+
+    const numericPrice = Number(weekRatePrice);
+    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+      showToast("Informe uma tarifa válida.");
+      return;
+    }
+
+    const startMonthDay = toMonthDay(weekRateStart);
+    const endMonthDay = toMonthDay(weekRateEnd);
+    if (!startMonthDay || !endMonthDay) {
+      showToast("Datas inválidas.");
+      return;
+    }
+
+    const nextRule: RoomSeasonalRate = {
+      label: weekRateLabel.trim() || undefined,
+      startMonthDay,
+      endMonthDay,
+      price: numericPrice,
+    };
+
+    const nextDraft = [
+      ...seasonalRatesDraft.filter(
+        (item) =>
+          !(item.startMonthDay === startMonthDay && item.endMonthDay === endMonthDay),
+      ),
+      nextRule,
+    ];
+
+    setSavingWeekRate(true);
+    try {
+      const response = await fetch(`/api/tenant/rooms/${selectedRoomId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonalRates: nextDraft }),
+      });
+
+      const payload = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) {
+        throw new Error(
+          payload.error ?? payload.message ?? "Falha ao salvar tarifa da semana.",
+        );
+      }
+
+      showToast("Tarifa da semana salva com sucesso.");
+      setWeekRatePrice("");
+      await loadData();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Erro ao salvar tarifa da semana.",
+      );
+    } finally {
+      setSavingWeekRate(false);
+    }
+  }
+
   async function handleSaveRateRules() {
     if (!selectedRoomId) {
       showToast("Selecione um quarto para salvar as regras de tarifa.");
@@ -340,12 +439,31 @@ export function CalendarManagement() {
       return;
     }
 
+    if (!priceSpecificDate) {
+      showToast("Selecione o dia para alterar a tarifa.");
+      return;
+    }
+
+    const monthDay = toMonthDay(priceSpecificDate);
+    if (!monthDay) {
+      showToast("Data inválida.");
+      return;
+    }
+
+    const nextDraft = [
+      ...seasonalRatesDraft.filter(
+        (item) =>
+          !(item.startMonthDay === monthDay && item.endMonthDay === monthDay),
+      ),
+      { startMonthDay: monthDay, endMonthDay: monthDay, price: numericPrice },
+    ];
+
     setSavingPrice(true);
     try {
-      const response = await fetch(`/api/tenant/rooms/${selectedRoomId}/price`, {
+      const response = await fetch(`/api/tenant/rooms/${selectedRoomId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ price: numericPrice }),
+        body: JSON.stringify({ seasonalRates: nextDraft }),
       });
 
       const payload = (await response.json()) as { error?: string; message?: string };
@@ -353,7 +471,7 @@ export function CalendarManagement() {
         throw new Error(payload.error ?? payload.message ?? "Falha ao salvar tarifa.");
       }
 
-      showToast("Tarifa atualizada com sucesso.");
+      showToast("Tarifa do dia atualizada com sucesso.");
       await loadData();
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Erro ao atualizar tarifa.");
@@ -502,36 +620,137 @@ export function CalendarManagement() {
         <article className="rounded-3xl border border-slate-200/70 bg-white/80 p-5 shadow-xl shadow-slate-200/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/70 dark:shadow-slate-950/30">
           <div className="mb-4 flex items-center gap-2">
             <Tag className="h-4 w-4 text-sky-500" />
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Alterar tarifa do quarto</h3>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Alterar tarifa de um dia</h3>
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Dia
+              </span>
+              <input
+                type="date"
+                value={priceSpecificDate}
+                onChange={(event) => setPriceSpecificDate(event.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Nova tarifa (R$)
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={newPrice}
+                onChange={(event) => setNewPrice(event.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+          </div>
+
+          <button
+            onClick={() => void handleUpdatePrice()}
+            disabled={savingPrice || !selectedRoomId || !priceSpecificDate}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20"
+          >
+            <Tag className="h-4 w-4" />
+            {savingPrice ? "Salvando tarifa..." : "Salvar tarifa do dia"}
+          </button>
+
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Define o preço somente para o dia selecionado. Use as regras abaixo para períodos recorrentes.
+          </p>
+        </article>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200/70 bg-white/80 p-5 shadow-xl shadow-slate-200/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/70 dark:shadow-slate-950/30">
+        <div className="mb-4 flex items-center gap-2">
+          <Tag className="h-4 w-4 text-violet-500" />
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Alterar tarifa por semana</h3>
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          {WEEK_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => handleApplyWeekPreset(preset)}
+              className="rounded-xl border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/20"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              Início
+            </span>
+            <input
+              type="date"
+              value={weekRateStart}
+              onChange={(event) => setWeekRateStart(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-violet-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
 
           <label className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-              Nova tarifa base (R$)
+              Fim
+            </span>
+            <input
+              type="date"
+              value={weekRateEnd}
+              onChange={(event) => setWeekRateEnd(event.target.value)}
+              min={weekRateStart}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-violet-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              Tarifa (R$)
             </span>
             <input
               type="number"
               min="0"
               step="0.01"
-              value={newPrice}
-              onChange={(event) => setNewPrice(event.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+              value={weekRatePrice}
+              onChange={(event) => setWeekRatePrice(event.target.value)}
+              placeholder="Ex.: 350"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-violet-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
 
-          <button
-            onClick={() => void handleUpdatePrice()}
-            disabled={savingPrice || !selectedRoomId}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20"
-          >
-            <Tag className="h-4 w-4" />
-            {savingPrice ? "Atualizando tarifa..." : "Salvar nova tarifa"}
-          </button>
+          <label className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              Rótulo (opcional)
+            </span>
+            <input
+              type="text"
+              value={weekRateLabel}
+              onChange={(event) => setWeekRateLabel(event.target.value)}
+              placeholder="Ex.: Natal, Réveillon"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-violet-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+        </div>
 
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Tarifa base do quarto. Use regras abaixo para preço por dia e por período.
-          </p>
-        </article>
+        <button
+          onClick={() => void handleSaveWeekRate()}
+          disabled={savingWeekRate || !selectedRoomId || !weekRatePrice}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/20"
+        >
+          <Tag className="h-4 w-4" />
+          {savingWeekRate ? "Salvando..." : "Salvar tarifa da semana"}
+        </button>
+
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          Use os atalhos acima para preencher semanas de feriado automaticamente. Rótulo é opcional.
+        </p>
       </section>
 
       <section className="rounded-3xl border border-slate-200/70 bg-white/80 p-5 shadow-xl shadow-slate-200/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/70 dark:shadow-slate-950/30">
