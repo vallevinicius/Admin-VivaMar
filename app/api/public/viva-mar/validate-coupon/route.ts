@@ -1,16 +1,28 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { resolvePublicTenantId } from "@/lib/public-tenant";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { code } = body;
+
+    if (typeof code !== "string" || !code.trim()) {
+      return NextResponse.json({ error: "Informe o código do cupom." }, { status: 400 });
+    }
+
+    const tenantId = await resolvePublicTenantId(request);
+
+    if (!tenantId) {
+      return NextResponse.json({ error: "Cupom inválido ou inexistente." }, { status: 404 });
+    }
+
     const { Coupon } = await getDb();
 
     // Busca o cupom pelo código (ignorando maiúsculas/minúsculas na hora da busca)
     const coupon = await Coupon.findOne({
       where: {
-        tenantId: 1,
+        tenantId,
         code: code.toUpperCase(),
       },
     });

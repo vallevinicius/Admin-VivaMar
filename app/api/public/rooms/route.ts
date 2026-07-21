@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
 import { getRooms } from "@/services/tenantService";
+import { resolvePublicTenantId } from "@/lib/public-tenant";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,34 +12,6 @@ const corsHeaders = {
 function removeInternalRoomFields(room: Record<string, unknown>) {
   const { channexRoomTypeId: _channexRoomTypeId, ...publicRoom } = room;
   return publicRoom;
-}
-
-async function resolvePublicTenantId(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const fromQuery = searchParams.get("tenantId");
-  const fromEnv = process.env.PUBLIC_ROOMS_TENANT_ID;
-
-  const parsedQuery = fromQuery ? Number(fromQuery) : NaN;
-  if (Number.isInteger(parsedQuery) && parsedQuery > 0) {
-    return parsedQuery;
-  }
-
-  const parsedEnv = fromEnv ? Number(fromEnv) : NaN;
-  if (Number.isInteger(parsedEnv) && parsedEnv > 0) {
-    return parsedEnv;
-  }
-
-  const { Room } = await getDb();
-  const firstRoom = await Room.findOne({
-    attributes: ["tenantId"],
-    order: [["tenantId", "ASC"], ["id", "ASC"]],
-  });
-
-  if (firstRoom?.tenantId) {
-    return firstRoom.tenantId;
-  }
-
-  return null;
 }
 
 export async function GET(request: Request) {

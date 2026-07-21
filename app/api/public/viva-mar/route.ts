@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
 import { getAvailableRooms } from "@/services/tenantService";
 import { createPublicReservation } from "@/actions/reservation";
+import { resolvePublicTenantId } from "@/lib/public-tenant";
 
 function removeInternalRoomFields(room: Record<string, unknown>) {
   const { channexRoomTypeId: _channexRoomTypeId, ...publicRoom } = room;
@@ -15,8 +15,16 @@ export async function GET(request: Request) {
   const checkOut = searchParams.get("checkOut");
 
   try {
+    const tenantId = await resolvePublicTenantId(request);
+
+    if (!tenantId) {
+      return NextResponse.json([], {
+        headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
+      });
+    }
+
     const rooms = (await getAvailableRooms(
-      1,
+      tenantId,
       checkIn || undefined,
       checkOut || undefined,
     )).map((room) => removeInternalRoomFields(room as Record<string, unknown>));
@@ -44,8 +52,17 @@ export async function POST(request: Request) {
   };
 
   try {
+    const tenantId = await resolvePublicTenantId(request);
+
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: "Nenhuma propriedade disponível para reservas no momento." },
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
     const novaReserva = await createPublicReservation({
-      tenantId: 1,
+      tenantId,
       roomId: body.roomId,
       checkIn: body.checkIn,
       checkOut: body.checkOut,

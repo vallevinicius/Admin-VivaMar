@@ -51,6 +51,18 @@ function parseStoredPolicyArray(input: unknown) {
   }
 }
 
+// Sequelize devolve DataTypes.DATE como objeto Date logo após o .create(),
+// não como a string original que foi passada — sem isso, `.slice(0, 10)`
+// direto quebra com "created.checkIn.slice is not a function".
+function formatDbDate(value: unknown): string {
+  if (!value) {
+    return '';
+  }
+
+  const asString = typeof value === 'string' ? value : new Date(value as string | number | Date).toISOString();
+  return asString.slice(0, 10);
+}
+
 function normalizeCpf(input: string | undefined): string | null {
   const raw = (input ?? '').trim();
   if (!raw) {
@@ -191,8 +203,8 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
     return {
       id: created.channexReservationId,
       roomId: room.localRoomId,
-      checkIn: created.checkIn.slice(0, 10),
-      checkOut: created.checkOut.slice(0, 10),
+      checkIn: formatDbDate(created.checkIn),
+      checkOut: formatDbDate(created.checkOut),
       status: created.status,
       otaSource: created.otaSource,
       channelReference: created.channelReference,
