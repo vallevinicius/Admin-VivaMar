@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedSession } from '@/lib/auth';
+import { getVerifiedTenantSession, hasFeatureAccess } from '@/lib/tenant-session';
 import { deleteExpense } from '@/services/tenantService';
 
 type RouteContext = {
@@ -9,10 +9,13 @@ type RouteContext = {
 };
 
 export async function DELETE(_: Request, context: RouteContext) {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     return NextResponse.json({ message: 'Não autenticado.' }, { status: 401 });
+  }
+  if (session.plan === 'basic' || !hasFeatureAccess(session, 'finance')) {
+    return NextResponse.json({ message: 'Sem permissão para esta ação.' }, { status: 403 });
   }
 
   const { expenseId } = await context.params;

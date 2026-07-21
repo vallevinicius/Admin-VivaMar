@@ -4,8 +4,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Libera o CORS para todas as rotas da API
-        source: "/api/:path*",
+        // CORS liberado apenas para as rotas públicas (consumidas pela
+        // landing page externa). As rotas /api/tenant/* e /api/auth/* são
+        // protegidas por cookie de sessão e não devem aceitar origens
+        // arbitrárias.
+        source: "/api/public/:path*",
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
           {
@@ -21,10 +24,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  experimental: {
-    typedRoutes: true,
-    serverComponentsExternalPackages: ["sequelize", "sequelize-typescript"],
-  },
+  typedRoutes: true,
   serverExternalPackages: ["sequelize", "sequelize-typescript"],
 };
 

@@ -96,6 +96,18 @@ function asFeatureKey(value: string): DashboardFeatureKey | null {
     : null;
 }
 
+export function parseStoredDashboardPermissions(raw: string | null | undefined): unknown {
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
 export function sanitizeDashboardPermissions(
   permissions: unknown,
 ): DashboardFeatureKey[] {
@@ -127,16 +139,10 @@ export function resolveDashboardPermissionsForRole(
     return DASHBOARD_NAV_ITEMS.map((item) => item.key);
   }
 
-  const sanitized = sanitizeDashboardPermissions(permissions);
-  if (sanitized.length > 0) {
-    return sanitized;
-  }
-
-  if (role === 'staff') {
-    return [...DEFAULT_STAFF_FEATURES];
-  }
-
-  return ['reservations'];
+  // Um array vazio é um estado explícito e válido ("gestor revogou todo o
+  // acesso"), não deve cair para os padrões de staff — caso contrário fica
+  // impossível bloquear totalmente o painel de um colaborador.
+  return sanitizeDashboardPermissions(permissions);
 }
 
 export function getVisibleDashboardNavItems(

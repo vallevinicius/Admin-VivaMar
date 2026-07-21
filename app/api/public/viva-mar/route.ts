@@ -50,12 +50,12 @@ export async function POST(request: Request) {
       checkIn: body.checkIn,
       checkOut: body.checkOut,
       entryType: "manual_reservation",
-      amount: Number(body.amount ?? 0),
       guestName: body.guestName,
       guestEmail: body.guestEmail,
       guestPhone: body.guestPhone,
       guestCpf: body.guestCpf,
       notes: body.notes ?? "",
+      couponCode: typeof body.couponCode === "string" ? body.couponCode : undefined,
       createdByUserId: null,
     });
 

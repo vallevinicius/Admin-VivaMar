@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { Op } from "sequelize";
-import { getAuthenticatedSession } from "@/lib/auth";
+import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 
 type OperationalStatus =
   | "vacant"
@@ -59,8 +59,14 @@ function formatTime(date: Date): string {
 
 export async function GET() {
   try {
-    const session = await getAuthenticatedSession();
-    const tenantId = session?.tenantId ?? 1;
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "rooms")) {
+      return NextResponse.json({ error: "Sem permissão para esta ação." }, { status: 403 });
+    }
+    const tenantId = session.tenantId;
     const { Room, Reservation, RoomUnitStatus } = await getDb();
 
     const today = new Date().toISOString().slice(0, 10);
@@ -90,32 +96,40 @@ export async function GET() {
       });
     }
 
-    // Group reservations by roomId
-    const reservationsByRoom = new Map<
-      number,
+    // Agrupa reservas por unidade física (roomId_unitNumber). Reservas
+    // antigas sem unitNumber (criadas antes desse controle existir) caem
+    // por padrão na unidade 1 do quarto.
+    const reservationsByUnit = new Map<
+      string,
       Array<{ checkIn: string; checkOut: string; status: string }>
     >();
     for (const r of reservationsToday) {
-      const list = reservationsByRoom.get(r.roomId) ?? [];
+      const key = `${r.roomId}_${r.unitNumber ?? 1}`;
+      const list = reservationsByUnit.get(key) ?? [];
       list.push({
         checkIn: typeof r.checkIn === "string" ? r.checkIn : new Date(r.checkIn).toISOString().slice(0, 10),
         checkOut: typeof r.checkOut === "string" ? r.checkOut : new Date(r.checkOut).toISOString().slice(0, 10),
         status: r.status,
       });
-      reservationsByRoom.set(r.roomId, list);
+      reservationsByUnit.set(key, list);
     }
 
     const snapshots = [];
     for (const room of rooms) {
-      const roomReservations = reservationsByRoom.get(room.id) ?? [];
-      const computedStatus = computeRoomStatus(room.status, roomReservations);
-
       for (let unitNo = 1; unitNo <= room.quantity; unitNo++) {
+        const unitReservations = reservationsByUnit.get(`${room.id}_${unitNo}`) ?? [];
+        const computedStatus = computeRoomStatus(room.status, unitReservations);
+
         const overrideKey = `${room.id}_${unitNo}`;
         const override = overrideMap.get(overrideKey);
 
-        const status = override?.status ?? computedStatus;
-        const updatedAt = override?.updatedAt
+        // Um override manual (ex.: "Limpando") só vale enquanto a unidade
+        // estiver de fato entre reservas. Assim que a próxima reserva
+        // aponta um hóspede chegando/hospedado, a apuração real substitui
+        // a anotação manual, que já pode estar desatualizada.
+        const canUseOverride = computedStatus === "vacant" || computedStatus === "cleaning";
+        const status = override && canUseOverride ? override.status : computedStatus;
+        const updatedAt = override?.updatedAt && canUseOverride
           ? formatTime(override.updatedAt)
           : "Hoje";
 

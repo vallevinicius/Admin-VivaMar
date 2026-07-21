@@ -41,6 +41,40 @@ async function ensureRoomAmenitiesColumn(models: DbModels) {
   }
 }
 
+async function ensureReservationUnitNumberColumn(models: DbModels) {
+  const table = await models.sequelize.getQueryInterface().describeTable('reservations');
+
+  if (!table.unit_number) {
+    await models.sequelize.getQueryInterface().addColumn('reservations', 'unit_number', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Número da unidade física (1..quantity) ocupada pela reserva',
+    });
+  }
+}
+
+async function ensureReservationStayColumns(models: DbModels) {
+  const queryInterface = models.sequelize.getQueryInterface();
+  const table = await queryInterface.describeTable('reservations');
+
+  if (!table.checked_in_at) {
+    await queryInterface.addColumn('reservations', 'checked_in_at', {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    });
+  }
+
+  if (!table.checked_out_at) {
+    await queryInterface.addColumn('reservations', 'checked_out_at', {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    });
+  }
+}
+
 async function ensureUserTeamColumns(models: DbModels) {
   const queryInterface = models.sequelize.getQueryInterface();
   const table = await queryInterface.describeTable('users');
@@ -121,8 +155,12 @@ export async function getDb(): Promise<DbModels> {
         if (shouldAutoSyncSchema()) {
           await sequelize.sync({ alter: true });
         }
+        // Migrações incrementais só precisam rodar uma vez, no cold start —
+        // repeti-las a cada requisição soma um describeTable() por chamada.
         await ensureRoomAmenitiesColumn(global.__sequelizeModels);
         await ensureUserTeamColumns(global.__sequelizeModels);
+        await ensureReservationUnitNumberColumn(global.__sequelizeModels);
+        await ensureReservationStayColumns(global.__sequelizeModels);
       }
 
       return global.__sequelizeModels;
@@ -133,8 +171,5 @@ export async function getDb(): Promise<DbModels> {
     });
   }
 
-  const models = await global.__sequelizeModelsPromise;
-  await ensureRoomAmenitiesColumn(models);
-  await ensureUserTeamColumns(models);
-  return models;
+  return global.__sequelizeModelsPromise;
 }

@@ -19,13 +19,18 @@ export type ReservationAttributes = {
   amount: number;
   currency: string;
   notes: string;
+  // Número da unidade física do quarto (1..quantity) ocupada por esta
+  // reserva. Nulo em reservas antigas criadas antes desse controle existir.
+  unitNumber: number | null;
+  checkedInAt: Date | null;
+  checkedOutAt: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 };
 
 export type ReservationCreationAttributes = Optional<
   ReservationAttributes,
-  "id" | "createdAt" | "updatedAt"
+  "id" | "createdAt" | "updatedAt" | "unitNumber" | "checkedInAt" | "checkedOutAt"
 >;
 
 export class Reservation
@@ -49,6 +54,9 @@ export class Reservation
   declare amount: number;
   declare currency: string;
   declare notes: string;
+  declare unitNumber: number | null;
+  declare checkedInAt: Date | null;
+  declare checkedOutAt: Date | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -152,6 +160,21 @@ export class Reservation
           type: DataTypes.TEXT,
           allowNull: false,
           defaultValue: "",
+        },
+        unitNumber: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "unit_number",
+        },
+        checkedInAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "checked_in_at",
+        },
+        checkedOutAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "checked_out_at",
         },
       },
       {

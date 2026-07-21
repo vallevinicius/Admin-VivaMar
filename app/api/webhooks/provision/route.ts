@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import type { Transaction } from 'sequelize';
 import type { TenantPlan } from '@/models/Tenant';
@@ -14,10 +15,30 @@ type ProvisionPayload = {
   webhookSecret?: string;
 };
 
+function isValidWebhookSecret(provided: string | undefined) {
+  const expected = process.env.PROVISION_WEBHOOK_SECRET;
+
+  // Falha fechado: sem segredo configurado no ambiente, nenhuma requisição
+  // é aceita — mesmo que o payload também venha sem `webhookSecret`
+  // (nesse caso `undefined !== undefined` deixaria passar com `!==`).
+  if (!expected || !provided) {
+    return false;
+  }
+
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+
+  if (expectedBuffer.length !== providedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
 export async function POST(request: Request) {
   const payload = (await request.json()) as ProvisionPayload;
 
-  if (payload.webhookSecret !== process.env.PROVISION_WEBHOOK_SECRET) {
+  if (!isValidWebhookSecret(payload.webhookSecret)) {
     return NextResponse.json({ message: 'Webhook inválido.' }, { status: 401 });
   }
 
@@ -41,7 +62,7 @@ export async function POST(request: Request) {
         { transaction },
       );
 
-      const passwordHash = await bcrypt.hash(payload.adminPassword!, 10);
+      const passwordHash = await bcrypt.hash(payload.adminPassword!, 12);
 
       await User.create(
         {

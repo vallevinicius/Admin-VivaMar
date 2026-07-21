@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAvailableRooms } from "@/services/tenantService";
-import { getAuthenticatedSession } from "@/lib/auth";
+import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    const session = await getAuthenticatedSession();
-    const tenantId = session?.tenantId ?? 1;
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "calendar")) {
+      return NextResponse.json({ error: "Sem permissão para esta ação." }, { status: 403 });
+    }
+    const tenantId = session.tenantId;
 
     const rooms = await getAvailableRooms(tenantId);
 

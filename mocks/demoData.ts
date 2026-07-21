@@ -1,4 +1,4 @@
-import type { Expense, Reservation, Room } from '@/types/channex';
+import type { Expense, Reservation, Room } from '@/types/domain';
 
 export const DEMO_TENANT_ID = 999;
 export const DEMO_TENANT_NAME = 'Pousada Viva Mar';

@@ -109,6 +109,28 @@ function rangesOverlap(startA: string, endA: string, startB: string, endB: strin
   return startA < endB && endA > startB;
 }
 
+function monthDayToDayOfYear(monthDay: string): number | null {
+  const [month, day] = monthDay.split('-').map(Number);
+  if (!Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  // Ano de referência fixo (não bissexto) só para medir o comprimento do
+  // intervalo — os valores absolutos de data não importam aqui.
+  return Date.UTC(2001, month - 1, day) / 86400000;
+}
+
+function monthDayRangeLength(startMonthDay: string, endMonthDay: string): number {
+  const start = monthDayToDayOfYear(startMonthDay);
+  const end = monthDayToDayOfYear(endMonthDay);
+
+  if (start === null || end === null) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return end >= start ? end - start : end + 365 - start;
+}
+
 export function findRoomSeasonalRate<T extends { startMonthDay: string; endMonthDay: string }>(
   seasonalRates: T[] | null | undefined,
   checkIn: string | Date,
@@ -118,7 +140,21 @@ export function findRoomSeasonalRate<T extends { startMonthDay: string; endMonth
     return null;
   }
 
-  return seasonalRates.find((rate) => monthDayIsWithinRange(monthDay, rate.startMonthDay, rate.endMonthDay)) ?? null;
+  const matches = seasonalRates.filter((rate) => monthDayIsWithinRange(monthDay, rate.startMonthDay, rate.endMonthDay));
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  // Quando mais de uma regra sazonal cobre a mesma data (períodos
+  // sobrepostos), a mais específica (intervalo mais curto) vence — em vez
+  // de depender da ordem de cadastro, como "a primeira que bater".
+  return matches.reduce((mostSpecific, candidate) =>
+    monthDayRangeLength(candidate.startMonthDay, candidate.endMonthDay) <
+    monthDayRangeLength(mostSpecific.startMonthDay, mostSpecific.endMonthDay)
+      ? candidate
+      : mostSpecific,
+  );
 }
 
 export function getRoomMinimumStay(room: RoomPolicySet, checkIn: string | Date) {

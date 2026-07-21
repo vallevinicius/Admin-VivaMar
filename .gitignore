@@ -26,3 +26,5 @@ out/
 Thumbs.db
 .vscode/
 .idea/
+
+/public/uploads

@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { getAuthenticatedSession } from '@/lib/auth';
+import { getVerifiedTenantSession, hasFeatureAccess } from '@/lib/tenant-session';
 import {
   resolveDashboardPermissionsForRole,
   sanitizeDashboardPermissions,
@@ -55,10 +55,14 @@ async function ensureTenantContext(tenantId: number, tenantName: string, plan: '
 }
 
 export async function GET() {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     return NextResponse.json({ message: 'Nao autenticado.' }, { status: 401 });
+  }
+
+  if (!hasFeatureAccess(session, 'team')) {
+    return NextResponse.json({ message: 'Sem permissao para esta acao.' }, { status: 403 });
   }
 
   await ensureTenantContext(session.tenantId, session.tenantName, session.plan);
@@ -101,7 +105,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     return NextResponse.json({ message: 'Nao autenticado.' }, { status: 401 });

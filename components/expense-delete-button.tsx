@@ -60,6 +60,7 @@ export function ExpenseDeleteButton({ expenseId, description }: ExpenseDeleteBut
         description={`Deseja realmente excluir \"${description}\"? Esta ação não pode ser desfeita.`}
         confirmLabel="Excluir despesa"
         loading={isDeleting}
+        error={error}
         onCancel={() => {
           if (!isDeleting) {
             setOpen(false);
@@ -68,8 +69,6 @@ export function ExpenseDeleteButton({ expenseId, description }: ExpenseDeleteBut
         }}
         onConfirm={handleConfirm}
       />
-
-      {error ? <p className="mt-2 text-xs text-rose-300">{error}</p> : null}
     </>
   );
 }

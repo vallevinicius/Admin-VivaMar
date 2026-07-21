@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent } from 'react';
 import { createExpenseAction } from '@/actions/expense';
 import { formatCurrencyInput, parseCurrencyInput } from '@/lib/utils';
-import type { ExpenseCategory } from '@/types/channex';
+import type { ExpenseCategory } from '@/types/domain';
 
 const expenseCategories: ExpenseCategory[] = ['limpeza', 'manutenção', 'impostos', 'insumos', 'comissões', 'outros'];
 

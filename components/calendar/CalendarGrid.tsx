@@ -1,11 +1,11 @@
 import { motion } from "framer-motion";
-import { cn, formatDateLabel, differenceInDays } from "@/lib/utils";
+import { cn, formatDateLabel, differenceInDays, daysBetween } from "@/lib/utils";
 import type {
   Reservation,
   Room,
   OtaSource,
   ReservationStatus,
-} from "@/types/channex";
+} from "@/types/domain";
 
 // Constantes visuais movidas para o componente que realmente as usa
 const OTA_STYLES: Record<OtaSource, string> = {
@@ -146,7 +146,7 @@ export function CalendarGrid({
                   const checkInDate = new Date(reservation.checkIn);
                   const checkOutDate = new Date(reservation.checkOut);
 
-                  const startOffset = differenceInDays(checkInDate, gridStart);
+                  const startOffset = daysBetween(gridStart, checkInDate);
                   const duration = differenceInDays(checkOutDate, checkInDate);
                   const visibleDuration = Math.min(
                     duration,

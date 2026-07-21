@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getAuthenticatedSession } from '@/lib/auth';
+import { getVerifiedTenantSession, hasFeatureAccess } from '@/lib/tenant-session';
 import { createExpense, deleteExpense } from '@/services/tenantService';
-import type { ExpenseCategory } from '@/types/channex';
+import type { ExpenseCategory } from '@/types/domain';
 
 type ExpenseInput = {
   description: string;
@@ -13,10 +13,14 @@ type ExpenseInput = {
 };
 
 export async function createExpenseAction(input: ExpenseInput) {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     throw new Error('Sessão inválida.');
+  }
+
+  if (session.plan === 'basic' || !hasFeatureAccess(session, 'finance')) {
+    throw new Error('Sem permissão para esta ação.');
   }
 
   await createExpense(
@@ -34,10 +38,14 @@ export async function createExpenseAction(input: ExpenseInput) {
 }
 
 export async function deleteExpenseAction(expenseId: string) {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     throw new Error('Sessão inválida.');
+  }
+
+  if (session.plan === 'basic' || !hasFeatureAccess(session, 'finance')) {
+    throw new Error('Sem permissão para esta ação.');
   }
 
   await deleteExpense(session.tenantId, expenseId);

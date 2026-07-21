@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ArrowLeftRight, CalendarRange, ContactRound, Hotel, Mail, Phone, ReceiptText, ShieldCheck, X } from 'lucide-react';
-import type { Room } from '@/types/channex';
+import type { Room } from '@/types/domain';
 
 export type GuestRecord = {
   id: string;

@@ -10,9 +10,17 @@ export function addDays(date: Date, days: number) {
   return result;
 }
 
-export function differenceInDays(start: Date, end: Date) {
+// Diferença de dias sem piso — pode ser 0 ou negativa. Usada para calcular
+// deslocamentos (ex.: posição de um bloco na grade do calendário), onde um
+// resultado de "no mínimo 1" deslocaria incorretamente eventos que começam
+// no próprio dia de referência (ou antes dele).
+export function daysBetween(start: Date, end: Date) {
   const millisecondsPerDay = 1000 * 60 * 60 * 24;
-  return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / millisecondsPerDay));
+  return Math.ceil((end.getTime() - start.getTime()) / millisecondsPerDay);
+}
+
+export function differenceInDays(start: Date, end: Date) {
+  return Math.max(1, daysBetween(start, end));
 }
 
 export function formatDateLabel(date: Date) {

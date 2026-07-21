@@ -21,6 +21,8 @@ type ReservationApiItem = {
   amount: number;
   currency: string;
   notes: string;
+  checkedInAt?: string | null;
+  checkedOutAt?: string | null;
   customer: {
     name: string;
     email: string;
@@ -101,15 +103,12 @@ function deriveStayStatus(reservation: ReservationApiItem): StayStatus {
     return 'checked_out';
   }
 
-  const start = `${reservation.checkIn.slice(0, 10)}`;
-  const end = `${reservation.checkOut.slice(0, 10)}`;
-
-  if (start <= TODAY_KEY && TODAY_KEY < end) {
-    return 'checked_in';
+  if (reservation.checkedOutAt) {
+    return 'checked_out';
   }
 
-  if (TODAY_KEY >= end) {
-    return 'checked_out';
+  if (reservation.checkedInAt) {
+    return 'checked_in';
   }
 
   return 'reserved';
@@ -126,6 +125,8 @@ function mapReservationToStay(reservation: ReservationApiItem, roomNameById: Map
     checkOutDate: reservation.checkOut.slice(0, 10),
     status: deriveStayStatus(reservation),
     notes: reservation.notes || 'Reserva registrada no banco de dados.',
+    checkedInAt: reservation.checkedInAt ?? undefined,
+    checkedOutAt: reservation.checkedOutAt ?? undefined,
   };
 }
 
@@ -225,7 +226,7 @@ export default function CheckPage() {
     setLogs((prev) => [`${time} - ${message}`, ...prev].slice(0, 8));
   }
 
-  function handleCheckIn(stayId: string) {
+  async function handleCheckIn(stayId: string) {
     const current = stays.find((stay) => stay.id === stayId);
     if (!current || current.status !== 'reserved') {
       return;
@@ -236,12 +237,23 @@ export default function CheckPage() {
       return;
     }
 
-    const checkedInAt = new Date().toISOString();
-    setStays((prev) => prev.map((stay) => (stay.id === stayId ? { ...stay, status: 'checked_in', checkedInAt } : stay)));
-    pushLog(`Check-in realizado para ${current.guestName} no quarto ${current.room}.`);
+    try {
+      const response = await fetch(`/api/tenant/reservations/${stayId}/check-in`, { method: 'POST' });
+      const payload = (await response.json()) as { reservation?: { checkedInAt?: string }; message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Falha ao registrar check-in.');
+      }
+
+      const checkedInAt = payload.reservation?.checkedInAt ?? new Date().toISOString();
+      setStays((prev) => prev.map((stay) => (stay.id === stayId ? { ...stay, status: 'checked_in', checkedInAt } : stay)));
+      pushLog(`Check-in realizado para ${current.guestName} no quarto ${current.room}.`);
+    } catch (error) {
+      pushLog(error instanceof Error ? error.message : 'Falha ao registrar check-in.');
+    }
   }
 
-  function handleCheckOut(stayId: string) {
+  async function handleCheckOut(stayId: string) {
     const current = stays.find((stay) => stay.id === stayId);
     if (!current || current.status !== 'checked_in') {
       return;
@@ -254,9 +266,20 @@ export default function CheckPage() {
       return;
     }
 
-    const checkedOutAt = new Date().toISOString();
-    setStays((prev) => prev.map((stay) => (stay.id === stayId ? { ...stay, status: 'checked_out', checkedOutAt } : stay)));
-    pushLog(`Checkout finalizado para ${current.guestName} no quarto ${current.room}.`);
+    try {
+      const response = await fetch(`/api/tenant/reservations/${stayId}/check-out`, { method: 'POST' });
+      const payload = (await response.json()) as { reservation?: { checkedOutAt?: string }; message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Falha ao registrar check-out.');
+      }
+
+      const checkedOutAt = payload.reservation?.checkedOutAt ?? new Date().toISOString();
+      setStays((prev) => prev.map((stay) => (stay.id === stayId ? { ...stay, status: 'checked_out', checkedOutAt } : stay)));
+      pushLog(`Checkout finalizado para ${current.guestName} no quarto ${current.room}.`);
+    } catch (error) {
+      pushLog(error instanceof Error ? error.message : 'Falha ao registrar check-out.');
+    }
   }
 
   return (

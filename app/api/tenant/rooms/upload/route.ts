@@ -4,7 +4,7 @@ import path from "path";
 
 import { NextResponse } from "next/server";
 
-import { getAuthenticatedSession } from "@/lib/auth";
+import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 
 export const runtime = "nodejs";
 
@@ -52,9 +52,12 @@ function slugifyRoomName(name: string) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getAuthenticatedSession();
+    const session = await getVerifiedTenantSession();
     if (!session) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "rooms")) {
+      return NextResponse.json({ error: "Sem permissão para esta ação." }, { status: 403 });
     }
 
     const formData = await request.formData();

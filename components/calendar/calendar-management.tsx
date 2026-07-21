@@ -5,7 +5,7 @@ import { CalendarDays, Lock, RefreshCw, Tag, Trash2 } from "lucide-react";
 import { useToast } from "@/components/toast-provider";
 import { addDays, cn } from "@/lib/utils";
 import { getRoomEffectivePrice } from "@/lib/room-policies";
-import type { Reservation, Room, RoomSeasonalRate } from "@/types/channex";
+import type { Reservation, Room, RoomSeasonalRate } from "@/types/domain";
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();

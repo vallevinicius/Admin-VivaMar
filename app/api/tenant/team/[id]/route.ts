@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthenticatedSession } from '@/lib/auth';
+import { getVerifiedTenantSession } from '@/lib/tenant-session';
 import {
   resolveDashboardPermissionsForRole,
   sanitizeDashboardPermissions,
@@ -23,7 +23,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     return NextResponse.json({ message: 'Nao autenticado.' }, { status: 401 });
@@ -112,7 +112,7 @@ export async function DELETE(
   _: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     return NextResponse.json({ message: 'Nao autenticado.' }, { status: 401 });

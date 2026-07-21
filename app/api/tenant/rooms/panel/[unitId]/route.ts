@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getAuthenticatedSession } from "@/lib/auth";
+import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 
 const VALID_STATUSES = [
   "vacant",
@@ -17,8 +17,14 @@ export async function PATCH(
   { params }: { params: Promise<{ unitId: string }> }
 ) {
   try {
-    const session = await getAuthenticatedSession();
-    const tenantId = session?.tenantId ?? 1;
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "rooms")) {
+      return NextResponse.json({ error: "Sem permissão para esta ação." }, { status: 403 });
+    }
+    const tenantId = session.tenantId;
     const resolvedParams = await params;
     const unitId = resolvedParams.unitId;
 

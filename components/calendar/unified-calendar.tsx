@@ -39,7 +39,7 @@ import type {
   Reservation,
   ReservationStatus,
   Room,
-} from "@/types/channex";
+} from "@/types/domain";
 import { CalendarHeader } from "@/components/calendar/CalendarHeader";
 import { CalendarMetrics } from "@/components/calendar/CalendarMetrics";
 import { CalendarControls } from "@/components/calendar/CalendarControls";
@@ -102,21 +102,39 @@ type ReservationDraft = {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  customerCpf: string;
   notes: string;
 };
 
-const initialManualForm: ManualEntryForm = {
-  roomId: "",
-  checkIn: "2026-03-23T14:00",
-  checkOut: "2026-03-24T12:00",
-  entryType: "blocked",
-  amount: "",
-  guestName: "",
-  guestEmail: "",
-  guestPhone: "",
-  guestCpf: "",
-  notes: "",
-};
+function buildInitialManualForm(): ManualEntryForm {
+  const today = new Date();
+  const checkInDate = new Date(today);
+  checkInDate.setHours(14, 0, 0, 0);
+  const checkOutDate = addDays(checkInDate, 1);
+  checkOutDate.setHours(12, 0, 0, 0);
+
+  const toLocalInputValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  return {
+    roomId: "",
+    checkIn: toLocalInputValue(checkInDate),
+    checkOut: toLocalInputValue(checkOutDate),
+    entryType: "blocked",
+    amount: "",
+    guestName: "",
+    guestEmail: "",
+    guestPhone: "",
+    guestCpf: "",
+    notes: "",
+  };
+}
 
 function formatCurrency(value: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", {
@@ -151,6 +169,7 @@ function createDraft(reservation: Reservation): ReservationDraft {
     customerName: reservation.customer.name,
     customerEmail: reservation.customer.email,
     customerPhone: reservation.customer.phone,
+    customerCpf: reservation.customer.cpf ?? "",
     notes: reservation.notes,
   };
 }
@@ -170,7 +189,7 @@ export function UnifiedCalendar() {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [manualForm, setManualForm] =
-    useState<ManualEntryForm>(initialManualForm);
+    useState<ManualEntryForm>(buildInitialManualForm);
   const [selectedReservationId, setSelectedReservationId] = useState<
     string | null
   >(null);
@@ -292,12 +311,13 @@ export function UnifiedCalendar() {
     const selectedRoomId = activeRooms.some((room) => room.id === roomId)
       ? (roomId ?? "")
       : (activeRooms[0]?.id ?? "");
+    const defaults = buildInitialManualForm();
     const checkIn = date
       ? `${date.toISOString().slice(0, 10)}T14:00`
-      : initialManualForm.checkIn;
+      : defaults.checkIn;
     const checkOut = date
       ? `${addDays(date, 1).toISOString().slice(0, 10)}T12:00`
-      : initialManualForm.checkOut;
+      : defaults.checkOut;
 
     setManualForm({
       roomId: selectedRoomId,
@@ -446,6 +466,7 @@ export function UnifiedCalendar() {
           name: draft.customerName,
           email: draft.customerEmail,
           phone: draft.customerPhone,
+          cpf: draft.customerCpf || undefined,
         },
         notes: draft.notes,
       };
@@ -1011,6 +1032,27 @@ export function UnifiedCalendar() {
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none"
                     />
                   </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-200">
+                      CPF
+                    </span>
+                    <input
+                      type="text"
+                      value={draft.customerCpf}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? { ...current, customerCpf: event.target.value }
+                            : current,
+                        )
+                      }
+                      placeholder="Ex.: 123.456.789-10"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-5 md:grid-cols-2">
                   <label className="block">
                     <span className="mb-2 block text-sm font-medium text-slate-200">
                       Status

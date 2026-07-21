@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getAuthenticatedSession } from "@/lib/auth";
+import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 import { parseMaybeNumber, parseRoomPolicyArray, type RoomClosurePeriod, type RoomSeasonalRate } from "@/lib/room-policies";
 
 function sanitizeStringArray(input: unknown) {
@@ -124,8 +124,14 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getAuthenticatedSession();
-    const tenantId = session?.tenantId ?? 1;
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "rooms")) {
+      return NextResponse.json({ error: "Sem permissão para esta ação." }, { status: 403 });
+    }
+    const tenantId = session.tenantId;
     const resolvedParams = await params;
     const localRoomId = resolvedParams.id;
     const body = await request.json();
@@ -238,8 +244,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getAuthenticatedSession();
-    const tenantId = session?.tenantId ?? 1;
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "rooms")) {
+      return NextResponse.json({ error: "Sem permissão para esta ação." }, { status: 403 });
+    }
+    const tenantId = session.tenantId;
     const resolvedParams = await params;
     const localRoomId = resolvedParams.id;
 

@@ -1,16 +1,16 @@
 'use server';
 
 import { Op } from 'sequelize';
-import { getAuthenticatedSession } from '@/lib/auth';
+import { getVerifiedTenantSession, hasFeatureAccess } from '@/lib/tenant-session';
 import { getDb } from '@/lib/db';
-import { createChannexBooking } from '@/services/channex/api';
-import type { Reservation } from '@/types/channex';
-import { differenceInNights, findBlockingClosure, getRoomMinimumStay } from '@/lib/room-policies';
-
-
-function shouldCreateInChannex() {
-  return process.env.CHANNEX_WRITE_ENABLED === 'true';
-}
+import type { Reservation } from '@/types/domain';
+import {
+  differenceInNights,
+  findBlockingClosure,
+  getRoomEffectivePrice,
+  getRoomMinimumStay,
+  type RoomSeasonalRate,
+} from '@/lib/room-policies';
 
 type ManualReservationInput = {
   roomId: string;
@@ -28,6 +28,10 @@ type ManualReservationInput = {
 type ReservationCreationContext = ManualReservationInput & {
   tenantId: number;
   createdByUserId?: number | null;
+  // Quando true, o preço enviado pelo cliente é ignorado e recalculado no
+  // servidor (usado pelo fluxo público, onde o `amount` não é confiável).
+  recomputePrice?: boolean;
+  couponCode?: string;
 };
 
 function parseStoredPolicyArray(input: unknown) {
@@ -62,161 +66,158 @@ function normalizeCpf(input: string | undefined): string | null {
 }
 
 async function createReservationWithRules(input: ReservationCreationContext): Promise<Reservation> {
-  const { Room, Reservation } = await getDb();
+  const { sequelize, Room, Reservation, Coupon } = await getDb();
   const normalizedCpf = normalizeCpf(input.guestCpf);
-  const room = await Room.findOne({ where: { tenantId: input.tenantId, localRoomId: input.roomId } });
 
-  if (!room) {
-    throw new Error('Quarto não encontrado para o tenant.');
-  }
-
-  const checkIn = new Date(input.checkIn);
-  const checkOut = new Date(input.checkOut);
-
-  if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
-    throw new Error('Período inválido para a reserva.');
-  }
-
-  const roomPolicy = {
-    minStayNights: room.minStayNights,
-    minStayDays: room.minStayDays,
-    seasonalRates: parseStoredPolicyArray(room.seasonalRates),
-    closurePeriods: parseStoredPolicyArray(room.closurePeriods),
-  };
-
-  const minimumStay = getRoomMinimumStay(roomPolicy, checkIn);
-  const stayLength = differenceInNights(checkIn, checkOut);
-
-  if (minimumStay.nights > 0 && stayLength < minimumStay.nights) {
-    throw new Error(`Este quarto exige pelo menos ${minimumStay.nights} noites.`);
-  }
-
-  if (minimumStay.days > 0 && stayLength < minimumStay.days) {
-    throw new Error(`Este quarto exige pelo menos ${minimumStay.days} dias.`);
-  }
-
-  const blockingClosure = findBlockingClosure(roomPolicy, checkIn, checkOut);
-  if (blockingClosure) {
-    throw new Error('Este quarto está fechado ou bloqueado para o período informado.');
-  }
-
-  const conflict = await Reservation.findOne({
-    where: {
-      tenantId: input.tenantId,
-      roomId: room.id,
-      status: { [Op.ne]: 'cancelled' },
-      checkIn: { [Op.lt]: checkOut },
-      checkOut: { [Op.gt]: checkIn },
-    },
-  });
-
-  if (conflict) {
-    throw new Error('Já existe uma reserva para este quarto neste período.');
-  }
-
-  if (shouldCreateInChannex()) {
-    if (!process.env.CHANNEX_PROPERTY_ID) {
-      throw new Error('Defina CHANNEX_PROPERTY_ID para criar reservas reais na Channex.');
-    }
-
-    if (!process.env.CHANNEX_DEFAULT_RATE_PLAN_ID) {
-      throw new Error('Defina CHANNEX_DEFAULT_RATE_PLAN_ID para criar reservas reais na Channex.');
-    }
-
-    if (!room.channexRoomTypeId) {
-      throw new Error('Quarto sem channexRoomTypeId.');
-    }
-
-    const remoteReservation = await createChannexBooking({
-      booking: {
-        property_id: process.env.CHANNEX_PROPERTY_ID,
-        arrival_date: input.checkIn.slice(0, 10),
-        departure_date: input.checkOut.slice(0, 10),
-        status: 'new',
-        currency: 'BRL',
-        amount: Number(input.amount).toFixed(2),
-        notes: input.notes,
-        customer: {
-          name: input.guestName,
-          email: input.guestEmail,
-          phone: input.guestPhone,
-        },
-        rooms: [
-          {
-            checkin_date: input.checkIn.slice(0, 10),
-            checkout_date: input.checkOut.slice(0, 10),
-            room_type_id: room.channexRoomTypeId,
-            rate_plan_id: process.env.CHANNEX_DEFAULT_RATE_PLAN_ID,
-            amount: Number(input.amount).toFixed(2),
-            occupancy: {
-              adults: 2,
-              children: 0,
-              infants: 0,
-            },
-          },
-        ],
-      },
+  return sequelize.transaction(async (transaction) => {
+    // Trava a linha do quarto para serializar tentativas concorrentes de reserva
+    // do mesmo quarto e evitar overbooking em requisições simultâneas.
+    const room = await Room.findOne({
+      where: { tenantId: input.tenantId, localRoomId: input.roomId },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
 
-    return {
-      ...remoteReservation,
-      roomId: room.localRoomId,
-      status: input.entryType === 'manual_reservation' ? 'confirmed' : 'blocked',
-      otaSource: 'manual',
-      notes: input.notes,
-      customer: {
-        name: input.guestName,
-        email: input.guestEmail,
-        phone: input.guestPhone,
-        cpf: normalizedCpf ?? undefined,
-      },
+    if (!room) {
+      throw new Error('Quarto não encontrado para o tenant.');
+    }
+
+    const checkIn = new Date(input.checkIn);
+    const checkOut = new Date(input.checkOut);
+
+    if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
+      throw new Error('Período inválido para a reserva.');
+    }
+
+    const roomPolicy = {
+      minStayNights: room.minStayNights,
+      minStayDays: room.minStayDays,
+      seasonalRates: parseStoredPolicyArray(room.seasonalRates),
+      closurePeriods: parseStoredPolicyArray(room.closurePeriods),
     };
-  }
 
-  const created = await Reservation.create({
-    roomId: room.id,
-    tenantId: input.tenantId,
-    channexReservationId: `manual_${Date.now()}`,
-    otaSource: 'manual',
-    checkIn: checkIn.toISOString(),
-    checkOut: checkOut.toISOString(),
-    status: input.entryType === 'manual_reservation' ? 'confirmed' : 'blocked',
-    channelReference: input.entryType === 'manual_reservation' ? 'MANUAL-RES' : 'MANUAL-BLOCK',
-    amount: input.entryType === 'manual_reservation' ? input.amount : 0,
-    currency: 'BRL',
-    guestName: input.guestName,
-    guestEmail: input.guestEmail,
-    guestPhone: input.guestPhone,
-    guestCpf: normalizedCpf,
-    notes: input.notes,
-    createdByUserId: input.createdByUserId ?? null,
+    const minimumStay = getRoomMinimumStay(roomPolicy, checkIn);
+    const stayLength = differenceInNights(checkIn, checkOut);
+
+    if (minimumStay.nights > 0 && stayLength < minimumStay.nights) {
+      throw new Error(`Este quarto exige pelo menos ${minimumStay.nights} noites.`);
+    }
+
+    if (minimumStay.days > 0 && stayLength < minimumStay.days) {
+      throw new Error(`Este quarto exige pelo menos ${minimumStay.days} dias.`);
+    }
+
+    const blockingClosure = findBlockingClosure(roomPolicy, checkIn, checkOut);
+    if (blockingClosure) {
+      throw new Error('Este quarto está fechado ou bloqueado para o período informado.');
+    }
+
+    const overlappingReservations = await Reservation.findAll({
+      where: {
+        tenantId: input.tenantId,
+        roomId: room.id,
+        status: { [Op.ne]: 'cancelled' },
+        checkIn: { [Op.lt]: checkOut },
+        checkOut: { [Op.gt]: checkIn },
+      },
+      attributes: ['unitNumber'],
+      transaction,
+    });
+
+    if (overlappingReservations.length >= room.quantity) {
+      throw new Error('Não há unidades disponíveis deste quarto para este período.');
+    }
+
+    const takenUnits = new Set(overlappingReservations.map((reservation) => reservation.unitNumber ?? 1));
+    let assignedUnit = 1;
+    while (takenUnits.has(assignedUnit) && assignedUnit <= room.quantity) {
+      assignedUnit += 1;
+    }
+
+    let amount = input.amount;
+
+    if (input.recomputePrice) {
+      const pricePerNight = getRoomEffectivePrice(
+        { price: Number(room.price), seasonalRates: roomPolicy.seasonalRates as RoomSeasonalRate[] },
+        checkIn,
+      );
+      let computedAmount = pricePerNight * stayLength;
+
+      if (input.couponCode) {
+        const coupon = await Coupon.findOne({
+          where: { tenantId: input.tenantId, code: input.couponCode.toUpperCase() },
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+
+        if (!coupon || coupon.status !== 'active') {
+          throw new Error('Cupom inválido ou inativo.');
+        }
+
+        if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+          throw new Error('Este cupom já atingiu o limite de uso.');
+        }
+
+        computedAmount = computedAmount * (1 - Number(coupon.discountPercentage) / 100);
+        await coupon.increment('usedCount', { by: 1, transaction });
+      }
+
+      amount = Math.max(0, Math.round(computedAmount * 100) / 100);
+    }
+
+    const created = await Reservation.create(
+      {
+        roomId: room.id,
+        tenantId: input.tenantId,
+        channexReservationId: `manual_${Date.now()}`,
+        otaSource: 'manual',
+        checkIn: checkIn.toISOString(),
+        checkOut: checkOut.toISOString(),
+        status: input.entryType === 'manual_reservation' ? 'confirmed' : 'blocked',
+        channelReference: input.entryType === 'manual_reservation' ? 'MANUAL-RES' : 'MANUAL-BLOCK',
+        amount: input.entryType === 'manual_reservation' ? amount : 0,
+        currency: 'BRL',
+        guestName: input.guestName,
+        guestEmail: input.guestEmail,
+        guestPhone: input.guestPhone,
+        guestCpf: normalizedCpf,
+        notes: input.notes,
+        createdByUserId: input.createdByUserId ?? null,
+        unitNumber: assignedUnit,
+      },
+      { transaction },
+    );
+
+    return {
+      id: created.channexReservationId,
+      roomId: room.localRoomId,
+      checkIn: created.checkIn.slice(0, 10),
+      checkOut: created.checkOut.slice(0, 10),
+      status: created.status,
+      otaSource: created.otaSource,
+      channelReference: created.channelReference,
+      amount: Number(created.amount),
+      currency: created.currency,
+      customer: {
+        name: created.guestName,
+        email: created.guestEmail,
+        phone: created.guestPhone,
+        cpf: (created.guestCpf as string | null) ?? undefined,
+      },
+      notes: created.notes,
+    };
   });
-
-  return {
-    id: created.channexReservationId,
-    roomId: room.localRoomId,
-    checkIn: created.checkIn.slice(0, 10),
-    checkOut: created.checkOut.slice(0, 10),
-    status: created.status,
-    otaSource: created.otaSource,
-    channelReference: created.channelReference,
-    amount: Number(created.amount),
-    currency: created.currency,
-    customer: {
-      name: created.guestName,
-      email: created.guestEmail,
-      phone: created.guestPhone,
-      cpf: (created.guestCpf as string | null) ?? undefined,
-    },
-    notes: created.notes,
-  };
 }
 
 export async function createManualReservationAction(input: ManualReservationInput): Promise<Reservation> {
-  const session = await getAuthenticatedSession();
+  const session = await getVerifiedTenantSession();
 
   if (!session) {
     throw new Error('Sessão inválida. Faça login novamente.');
+  }
+
+  if (!hasFeatureAccess(session, 'reservations')) {
+    throw new Error('Sem permissão para esta ação.');
   }
 
   if (input.entryType === 'manual_reservation') {
@@ -242,6 +243,26 @@ export async function createManualReservationAction(input: ManualReservationInpu
   });
 }
 
-export async function createPublicReservation(input: Omit<ReservationCreationContext, 'tenantId'> & { tenantId: number }) {
-  return createReservationWithRules(input);
+export async function createPublicReservation(
+  input: Omit<ReservationCreationContext, 'tenantId' | 'amount' | 'recomputePrice'> & { tenantId: number },
+) {
+  if (
+    !input.roomId ||
+    !input.checkIn ||
+    !input.checkOut ||
+    !input.guestName ||
+    !input.guestEmail ||
+    !input.guestPhone ||
+    !input.guestCpf
+  ) {
+    throw new Error('Todos os campos são obrigatórios para concluir a reserva.');
+  }
+
+  // O preço nunca vem do cliente: é sempre recalculado a partir do quarto,
+  // das datas e (se houver) de um cupom válido, dentro da mesma transação.
+  return createReservationWithRules({
+    ...input,
+    amount: 0,
+    recomputePrice: true,
+  });
 }

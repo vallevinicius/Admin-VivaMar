@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedSession } from "@/lib/auth";
+import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 import { createManualReservationAction } from "@/actions/reservation";
 import {
   deleteReservation,
   getTenantReservations,
   updateReservation,
 } from "@/services/tenantService";
-import type { Reservation } from "@/types/channex";
-
-function resolveTenantId(session: Awaited<ReturnType<typeof getAuthenticatedSession>>) {
-  // O calendário atualmente opera com tenant fixo 1.
-  // Mantemos esse valor para evitar inconsistência entre listar/editar/excluir.
-  return session?.tenantId ?? 1;
-}
+import type { Reservation } from "@/types/domain";
 
 export async function PATCH(request: Request) {
-  const session = await getAuthenticatedSession();
-  const tenantId = resolveTenantId(session);
+  const session = await getVerifiedTenantSession();
+  if (!session) {
+    return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
+  }
+  if (!hasFeatureAccess(session, "reservations")) {
+    return NextResponse.json({ message: "Sem permissão para esta ação." }, { status: 403 });
+  }
 
   const body = (await request.json()) as { reservation?: Reservation };
 
@@ -25,7 +24,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const reservation = await updateReservation(tenantId, body.reservation);
+    const reservation = await updateReservation(session.tenantId, body.reservation);
     return NextResponse.json({ reservation });
   } catch (error) {
     return NextResponse.json(
@@ -40,12 +39,17 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const session = await getAuthenticatedSession();
-    const tenantId = resolveTenantId(session);
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "reservations")) {
+      return NextResponse.json({ message: "Sem permissão para esta ação." }, { status: 403 });
+    }
 
-    const reservations = await getTenantReservations(tenantId);
+    const reservations = await getTenantReservations(session.tenantId);
 
     return NextResponse.json(reservations.map((reservation) => reservation.toJSON()), { status: 200 });
   } catch (error: any) {
@@ -56,6 +60,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const session = await getVerifiedTenantSession();
+    if (!session) {
+      return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
+    }
+    if (!hasFeatureAccess(session, "reservations")) {
+      return NextResponse.json({ message: "Sem permissão para esta ação." }, { status: 403 });
+    }
+
     const body = (await request.json()) as {
       roomId?: string;
       checkIn?: string;
@@ -118,8 +130,13 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await getAuthenticatedSession();
-  const tenantId = resolveTenantId(session);
+  const session = await getVerifiedTenantSession();
+  if (!session) {
+    return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
+  }
+  if (!hasFeatureAccess(session, "reservations")) {
+    return NextResponse.json({ message: "Sem permissão para esta ação." }, { status: 403 });
+  }
 
   const body = (await request.json()) as { reservationId?: string };
   const reservationId = body.reservationId?.trim();
@@ -129,7 +146,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await deleteReservation(tenantId, reservationId);
+    await deleteReservation(session.tenantId, reservationId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

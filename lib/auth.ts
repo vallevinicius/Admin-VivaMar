@@ -51,6 +51,10 @@ function base64UrlDecodeText(input: string) {
   return Buffer.from(input, 'base64url').toString('utf-8');
 }
 
+function base64UrlDecodeBytes(input: string): Uint8Array {
+  return new Uint8Array(Buffer.from(input, 'base64url'));
+}
+
 async function importHmacKey(secret: string) {
   return crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
@@ -59,6 +63,19 @@ async function sign(value: string, secret: string) {
   const key = await importHmacKey(secret);
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(value));
   return base64UrlEncodeBytes(new Uint8Array(signature));
+}
+
+// Usa crypto.subtle.verify (constant-time) em vez de recalcular a
+// assinatura esperada e comparar strings com `!==`, que é vulnerável a
+// timing attack.
+async function verifySignature(value: string, secret: string, signature: string) {
+  try {
+    const key = await importHmacKey(secret);
+    const signatureBytes = base64UrlDecodeBytes(signature);
+    return await crypto.subtle.verify('HMAC', key, signatureBytes as unknown as ArrayBuffer, encoder.encode(value));
+  } catch {
+    return false;
+  }
 }
 
 export async function createSessionToken(payload: Omit<SessionPayload, 'exp'>): Promise<string> {
@@ -78,9 +95,9 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     }
 
     const unsigned = `${header}.${body}`;
-    const expected = await sign(unsigned, getSecret());
+    const isValid = await verifySignature(unsigned, getSecret(), signature);
 
-    if (signature !== expected) {
+    if (!isValid) {
       return null;
     }
 
