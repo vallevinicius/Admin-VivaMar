@@ -136,6 +136,15 @@ function buildInitialManualForm(): ManualEntryForm {
   };
 }
 
+function localInputValueToIso(value: string) {
+  // "datetime-local" retorna a data/hora exatamente como o usuário digitou,
+  // sem fuso. Usar `new Date(value).toISOString()` reinterpreta esse valor
+  // como horário local do navegador e o converte para UTC, o que pode
+  // empurrar o dia para o seguinte (ex.: 22h em UTC-3 vira 01h UTC do dia
+  // seguinte). Anexar "Z" preserva o dia/hora exatos que o usuário escolheu.
+  return `${value}:00.000Z`;
+}
+
 function formatCurrency(value: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -302,9 +311,12 @@ export function UnifiedCalendar() {
   }, [activeRooms, manualForm.roomId]);
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/");
-    router.refresh();
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/");
+      router.refresh();
+    }
   }
 
   function openManualEntryModal(roomId?: string, date?: Date) {
@@ -395,8 +407,8 @@ export function UnifiedCalendar() {
 
       const createdReservation = await createManualReservationAction({
         roomId: manualForm.roomId,
-        checkIn: new Date(manualForm.checkIn).toISOString(),
-        checkOut: new Date(manualForm.checkOut).toISOString(),
+        checkIn: localInputValueToIso(manualForm.checkIn),
+        checkOut: localInputValueToIso(manualForm.checkOut),
         entryType: manualForm.entryType,
         amount,
         guestName: manualForm.guestName,

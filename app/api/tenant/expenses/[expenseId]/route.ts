@@ -14,7 +14,7 @@ export async function DELETE(_: Request, context: RouteContext) {
   if (!session) {
     return NextResponse.json({ message: 'Não autenticado.' }, { status: 401 });
   }
-  if (session.plan === 'basic' || !hasFeatureAccess(session, 'finance')) {
+  if (!hasFeatureAccess(session, 'finance')) {
     return NextResponse.json({ message: 'Sem permissão para esta ação.' }, { status: 403 });
   }
 

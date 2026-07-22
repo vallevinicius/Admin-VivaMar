@@ -976,7 +976,7 @@ export function CalendarManagement() {
                     {reservation.status === "blocked" ? "Bloqueio" : "Reserva"} • {reservation.customer.name}
                   </p>
                   <span className="text-xs text-slate-600 dark:text-slate-300">
-                    {new Date(reservation.checkIn).toLocaleDateString("pt-BR")} ate {new Date(reservation.checkOut).toLocaleDateString("pt-BR")}
+                    {parseDateOnly(reservation.checkIn).toLocaleDateString("pt-BR")} ate {parseDateOnly(reservation.checkOut).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{reservation.notes || "Sem observações."}</p>

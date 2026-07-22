@@ -152,13 +152,7 @@ export function getVisibleDashboardNavItems(
 ): DashboardNavItem[] {
   const allowed = new Set(resolveDashboardPermissionsForRole(role, permissions));
 
-  return DASHBOARD_NAV_ITEMS.filter((item) => {
-    if (item.key === 'finance' && plan === 'basic') {
-      return false;
-    }
-
-    return allowed.has(item.key);
-  });
+  return DASHBOARD_NAV_ITEMS.filter((item) => allowed.has(item.key));
 }
 
 export function canAccessDashboardPath(

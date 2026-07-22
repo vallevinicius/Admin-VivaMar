@@ -70,6 +70,7 @@ export default function TeamPage() {
   });
   const [permissionDraft, setPermissionDraft] = useState<Record<number, DashboardFeatureKey[]>>({});
   const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
+  const [isAddingMember, setIsAddingMember] = useState(false);
 
   async function loadTeam() {
     setLoading(true);
@@ -126,44 +127,51 @@ export default function TeamPage() {
   async function addMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!form.name || !form.email || !form.password) {
+    if (!form.name || !form.email || !form.password || isAddingMember) {
       return;
     }
 
     setError(null);
+    setIsAddingMember(true);
 
-    const response = await fetch('/api/tenant/team', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: form.name,
-        email: form.email,
-        password: form.password,
-        phone: form.phone,
-        role: form.role,
-        shift: form.shift,
-        permissions: form.permissions,
-      }),
-    });
+    try {
+      const response = await fetch('/api/tenant/team', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          phone: form.phone,
+          role: form.role,
+          shift: form.shift,
+          permissions: form.permissions,
+        }),
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { message?: string };
-      setError(payload.message ?? 'Nao foi possivel criar colaborador.');
-      return;
+      if (!response.ok) {
+        const payload = (await response.json()) as { message?: string };
+        setError(payload.message ?? 'Nao foi possivel criar colaborador.');
+        return;
+      }
+
+      setForm({
+        name: '',
+        email: '',
+        password: '',
+        phone: '',
+        role: 'Recepcao',
+        shift: 'Manha',
+        permissions: [...DEFAULT_STAFF_FEATURES],
+      });
+      await loadTeam();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Erro de conexao ao criar colaborador.');
+    } finally {
+      setIsAddingMember(false);
     }
-
-    setForm({
-      name: '',
-      email: '',
-      password: '',
-      phone: '',
-      role: 'Recepcao',
-      shift: 'Manha',
-      permissions: [...DEFAULT_STAFF_FEATURES],
-    });
-    await loadTeam();
   }
 
   function togglePermission(permissions: DashboardFeatureKey[], key: DashboardFeatureKey) {
@@ -178,49 +186,57 @@ export default function TeamPage() {
     setBusyMemberId(memberId);
     setError(null);
 
-    const response = await fetch(`/api/tenant/team/${memberId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action }),
-    });
+    try {
+      const response = await fetch(`/api/tenant/team/${memberId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { message?: string };
-      setError(payload.message ?? 'Falha ao atualizar colaborador.');
+      if (!response.ok) {
+        const payload = (await response.json()) as { message?: string };
+        setError(payload.message ?? 'Falha ao atualizar colaborador.');
+        return;
+      }
+
+      await loadTeam();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Erro de conexao ao atualizar colaborador.');
+    } finally {
       setBusyMemberId(null);
-      return;
     }
-
-    setBusyMemberId(null);
-    await loadTeam();
   }
 
   async function savePermissions(memberId: number) {
     setSavingPermissionsFor(memberId);
     setError(null);
 
-    const response = await fetch(`/api/tenant/team/${memberId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'set-permissions',
-        permissions: permissionDraft[memberId] ?? [],
-      }),
-    });
+    try {
+      const response = await fetch(`/api/tenant/team/${memberId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'set-permissions',
+          permissions: permissionDraft[memberId] ?? [],
+        }),
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { message?: string };
-      setError(payload.message ?? 'Nao foi possivel salvar permissoes.');
+      if (!response.ok) {
+        const payload = (await response.json()) as { message?: string };
+        setError(payload.message ?? 'Nao foi possivel salvar permissoes.');
+        return;
+      }
+
+      await loadTeam();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Erro de conexao ao salvar permissoes.');
+    } finally {
       setSavingPermissionsFor(null);
-      return;
     }
-
-    setSavingPermissionsFor(null);
-    await loadTeam();
   }
 
   async function deleteMember(member: TeamMember) {
@@ -239,20 +255,24 @@ export default function TeamPage() {
     setBusyMemberId(memberToDelete.id);
     setError(null);
 
-    const response = await fetch(`/api/tenant/team/${memberToDelete.id}`, {
-      method: 'DELETE',
-    });
+    try {
+      const response = await fetch(`/api/tenant/team/${memberToDelete.id}`, {
+        method: 'DELETE',
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { message?: string };
-      setError(payload.message ?? 'Nao foi possivel excluir colaborador.');
+      if (!response.ok) {
+        const payload = (await response.json()) as { message?: string };
+        setError(payload.message ?? 'Nao foi possivel excluir colaborador.');
+        return;
+      }
+
+      setMemberToDelete(null);
+      await loadTeam();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Erro de conexao ao excluir colaborador.');
+    } finally {
       setBusyMemberId(null);
-      return;
     }
-
-    setBusyMemberId(null);
-    setMemberToDelete(null);
-    await loadTeam();
   }
 
   return (
@@ -530,10 +550,10 @@ export default function TeamPage() {
 
             <button
               type="submit"
-              disabled={!canManage}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-900/30"
+              disabled={!canManage || isAddingMember}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-900/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Plus className="h-4 w-4" /> Adicionar colaborador
+              <Plus className="h-4 w-4" /> {isAddingMember ? 'Adicionando...' : 'Adicionar colaborador'}
             </button>
 
             {!canManage ? (

@@ -4,7 +4,7 @@ import { createExpense, getExpenses, getReservations } from '@/services/tenantSe
 import type { Expense } from '@/types/domain';
 
 function canAccessFinance(session: NonNullable<Awaited<ReturnType<typeof getVerifiedTenantSession>>>) {
-  return session.plan !== 'basic' && hasFeatureAccess(session, 'finance');
+  return hasFeatureAccess(session, 'finance');
 }
 
 export async function GET() {

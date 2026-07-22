@@ -109,6 +109,8 @@ export default function RoomsPage() {
   const [roomBeingEdited, setRoomBeingEdited] = useState<string | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<string | null>(null);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
   const [newRoom, setNewRoom] = useState({
     name: '',
     price: '',
@@ -364,6 +366,10 @@ export default function RoomsPage() {
   const handleUpdateRoom = async (e: FormEvent) => {
     e.preventDefault();
 
+    if (isUpdatingRoom) {
+      return;
+    }
+
     if (!editRoom.name.trim()) {
       showToast('Nome do quarto é obrigatório');
       return;
@@ -407,15 +413,16 @@ export default function RoomsPage() {
       return;
     }
 
-    let uploadedPhotoUrls: string[] = [];
+    setIsUpdatingRoom(true);
     try {
-      uploadedPhotoUrls = await uploadRoomPhotos(editRoom.newPhotoFiles, editRoom.name);
-    } catch (error: any) {
-      showToast(error?.message || 'Erro ao enviar fotos');
-      return;
-    }
+      let uploadedPhotoUrls: string[] = [];
+      try {
+        uploadedPhotoUrls = await uploadRoomPhotos(editRoom.newPhotoFiles, editRoom.name);
+      } catch (error: any) {
+        showToast(error?.message || 'Erro ao enviar fotos');
+        return;
+      }
 
-    try {
       const res = await fetch(`/api/tenant/rooms/${roomBeingEdited}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -450,6 +457,8 @@ export default function RoomsPage() {
       }
     } catch (error) {
       showToast('Erro de conexão ao atualizar quarto');
+    } finally {
+      setIsUpdatingRoom(false);
     }
   };
 
@@ -488,15 +497,23 @@ export default function RoomsPage() {
 
   async function updateStatus(id: string, status: RoomOperationalStatus) {
     const now = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date());
+    const previousSnapshot = snapshots.find((room) => room.id === id);
     setSnapshots((prev) => prev.map((room) => (room.id === id ? { ...room, status, updatedAt: now } : room)));
     try {
-      await fetch(`/api/tenant/rooms/panel/${id}`, {
+      const res = await fetch(`/api/tenant/rooms/panel/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
+
+      if (!res.ok) {
+        throw new Error('Falha ao salvar status');
+      }
     } catch {
-      showToast('Erro ao salvar status');
+      if (previousSnapshot) {
+        setSnapshots((prev) => prev.map((room) => (room.id === id ? previousSnapshot : room)));
+      }
+      showToast('Erro ao salvar status. Alteração revertida.');
     }
   }
 
@@ -573,6 +590,10 @@ export default function RoomsPage() {
   const handleCreateRoom = async (e: FormEvent) => {
     e.preventDefault();
 
+    if (isCreatingRoom) {
+      return;
+    }
+
     if (!newRoom.name.trim()) {
       showToast('Nome do quarto é obrigatório');
       return;
@@ -611,15 +632,16 @@ export default function RoomsPage() {
       return;
     }
 
-    let uploadedPhotoUrls: string[] = [];
+    setIsCreatingRoom(true);
     try {
-      uploadedPhotoUrls = await uploadRoomPhotos(newRoom.photoFiles, newRoom.name);
-    } catch (error: any) {
-      showToast(error?.message || 'Erro ao enviar fotos');
-      return;
-    }
+      let uploadedPhotoUrls: string[] = [];
+      try {
+        uploadedPhotoUrls = await uploadRoomPhotos(newRoom.photoFiles, newRoom.name);
+      } catch (error: any) {
+        showToast(error?.message || 'Erro ao enviar fotos');
+        return;
+      }
 
-    try {
       const res = await fetch('/api/tenant/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -666,6 +688,8 @@ export default function RoomsPage() {
       }
     } catch (error) {
       showToast('Erro de conexão ao criar quarto');
+    } finally {
+      setIsCreatingRoom(false);
     }
   };
 
@@ -1302,14 +1326,16 @@ export default function RoomsPage() {
                 <div className="sticky bottom-0 z-10 flex gap-3 border-t border-white/10 bg-slate-900 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500"
+                    disabled={isCreatingRoom}
+                    className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Criar Quarto
+                    {isCreatingRoom ? 'Criando...' : 'Criar Quarto'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-900"
+                    disabled={isCreatingRoom}
+                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
                   </button>
@@ -1635,14 +1661,16 @@ export default function RoomsPage() {
                 <div className="sticky bottom-0 z-10 flex gap-3 border-t border-white/10 bg-slate-900 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500"
+                    disabled={isUpdatingRoom}
+                    className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Atualizar Quarto
+                    {isUpdatingRoom ? 'Atualizando...' : 'Atualizar Quarto'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-900"
+                    disabled={isUpdatingRoom}
+                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
                   </button>

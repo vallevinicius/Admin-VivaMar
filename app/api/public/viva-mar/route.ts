@@ -83,8 +83,13 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Erro no POST Viva Mar:", error);
     return NextResponse.json(
-      { error: "Erro interno ao criar reserva" },
-      { status: 500, headers: corsHeaders },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Erro interno ao criar reserva",
+      },
+      { status: 400, headers: corsHeaders },
     );
   }
 }

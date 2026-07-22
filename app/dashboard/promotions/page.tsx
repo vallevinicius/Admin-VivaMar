@@ -30,6 +30,7 @@ export default function PromotionsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [couponToDelete, setCouponToDelete] = useState<number | null>(null);
   const [isDeletingCoupon, setIsDeletingCoupon] = useState(false);
+  const [isCreatingCoupon, setIsCreatingCoupon] = useState(false);
   const [newCoupon, setNewCoupon] = useState({
     code: "",
     discount: "",
@@ -57,11 +58,14 @@ export default function PromotionsPage() {
   // ===================== LÓGICA DE CUPONS =====================
   const handleCreateCoupon = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newCoupon.code || !newCoupon.discount) {
-      showToast("Preencha o código e o percentual de desconto.");
+    if (!newCoupon.code || !newCoupon.discount || isCreatingCoupon) {
+      if (!newCoupon.code || !newCoupon.discount) {
+        showToast("Preencha o código e o percentual de desconto.");
+      }
       return;
     }
 
+    setIsCreatingCoupon(true);
     try {
       const res = await fetch("/api/tenant/coupons", {
         method: "POST",
@@ -84,23 +88,32 @@ export default function PromotionsPage() {
       }
     } catch (error) {
       showToast("Erro de conexão ao criar cupom.");
+    } finally {
+      setIsCreatingCoupon(false);
     }
   };
 
   const toggleCouponStatus = async (id: number, currentStatus: string) => {
     const newStatus = currentStatus === "active" ? "inactive" : "active";
     try {
-      await fetch(`/api/tenant/coupons/${id}`, {
+      const res = await fetch(`/api/tenant/coupons/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        showToast(errorData.error ? `Erro: ${errorData.error}` : "Erro ao alterar status do cupom.");
+        return;
+      }
+
       fetchData();
       showToast(
         newStatus === "active" ? "Cupom ativado!" : "Cupom desativado."
       );
     } catch (error) {
-      showToast("Erro ao alterar status do cupom.");
+      showToast("Erro de conexão ao alterar status do cupom.");
     }
   };
 
@@ -329,14 +342,16 @@ export default function PromotionsPage() {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-500"
+                    disabled={isCreatingCoupon}
+                    className="flex-1 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Criar Cupom
+                    {isCreatingCoupon ? "Criando..." : "Criar Cupom"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-900"
+                    disabled={isCreatingCoupon}
+                    className="flex-1 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
                   </button>

@@ -52,8 +52,6 @@ function toLocalDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-const TODAY_KEY = toLocalDateKey(new Date());
-
 function formatShortDate(value: string) {
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
@@ -137,6 +135,16 @@ export default function CheckPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [todayKey, setTodayKey] = useState(() => toLocalDateKey(new Date()));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentKey = toLocalDateKey(new Date());
+      setTodayKey((prev) => (prev === currentKey ? prev : currentKey));
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -209,11 +217,11 @@ export default function CheckPage() {
   }, [stays]);
 
   function canCheckInToday(stay: Stay) {
-    return stay.status === 'reserved' && stay.checkInDate === TODAY_KEY;
+    return stay.status === 'reserved' && stay.checkInDate === todayKey;
   }
 
   function canCheckOutToday(stay: Stay) {
-    return stay.status === 'checked_in' && stay.checkOutDate === TODAY_KEY;
+    return stay.status === 'checked_in' && stay.checkOutDate === todayKey;
   }
 
   function pushLog(message: string) {
@@ -232,7 +240,7 @@ export default function CheckPage() {
       return;
     }
 
-    if (current.checkInDate !== TODAY_KEY) {
+    if (current.checkInDate !== todayKey) {
       pushLog(`Check-in bloqueado para ${current.guestName}. Permitido somente no dia ${formatShortDate(current.checkInDate)}.`);
       return;
     }
@@ -259,7 +267,7 @@ export default function CheckPage() {
       return;
     }
 
-    if (current.checkOutDate !== TODAY_KEY) {
+    if (current.checkOutDate !== todayKey) {
       pushLog(
         `Checkout bloqueado para ${current.guestName}. Permitido somente no último dia da reserva (${formatShortDate(current.checkOutDate)}).`,
       );

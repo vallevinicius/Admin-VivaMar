@@ -19,7 +19,7 @@ export async function createExpenseAction(input: ExpenseInput) {
     throw new Error('Sessão inválida.');
   }
 
-  if (session.plan === 'basic' || !hasFeatureAccess(session, 'finance')) {
+  if (!hasFeatureAccess(session, 'finance')) {
     throw new Error('Sem permissão para esta ação.');
   }
 
@@ -44,7 +44,7 @@ export async function deleteExpenseAction(expenseId: string) {
     throw new Error('Sessão inválida.');
   }
 
-  if (session.plan === 'basic' || !hasFeatureAccess(session, 'finance')) {
+  if (!hasFeatureAccess(session, 'finance')) {
     throw new Error('Sem permissão para esta ação.');
   }
 
