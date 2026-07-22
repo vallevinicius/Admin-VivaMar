@@ -175,5 +175,10 @@ export function getDefaultDashboardHref(
   permissions: unknown,
 ): Route {
   const firstAllowed = getVisibleDashboardNavItems(plan, role, permissions)[0];
-  return firstAllowed?.href ?? '/dashboard/calendar';
+  // '/dashboard' é a única rota sempre acessível (ver canAccessDashboardPath).
+  // Cair para '/dashboard/calendar' aqui reabriria a brecha que este fallback
+  // existe para fechar: um colaborador sem nenhuma permissão apontaria para
+  // uma rota que ele também não pode acessar, e como pathname === destination
+  // o middleware não redireciona de novo — deixando a página renderizar.
+  return firstAllowed?.href ?? '/dashboard';
 }
