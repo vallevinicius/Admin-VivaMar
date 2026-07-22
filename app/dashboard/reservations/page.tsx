@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarPlus2, Loader2, Sparkles } from 'lucide-react';
+import { formatCurrencyInput, parseCurrencyInput } from '@/lib/utils';
 
 type RoomOption = {
   id: string;
@@ -215,7 +216,7 @@ export default function ReservationsPage() {
           guestCpf: form.entryType === 'blocked' ? '' : form.guestCpf,
           checkIn: form.checkIn,
           checkOut: form.checkOut,
-          amount: Number(form.amount || '0'),
+          amount: parseCurrencyInput(form.amount || '0'),
           notes: form.notes,
           entryType: form.entryType,
         }),
@@ -375,13 +376,11 @@ export default function ReservationsPage() {
               />
             </div>
             <input
-              type="number"
-              min={0}
-              step="0.01"
+              type="text"
               value={form.amount}
-              onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
+              onChange={(event) => setForm((current) => ({ ...current, amount: formatCurrencyInput(event.target.value) }))}
               required={form.entryType !== 'blocked'}
-              placeholder="Valor total"
+              placeholder="R$ 0,00"
               className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-sky-300 transition focus:ring"
             />
             <textarea

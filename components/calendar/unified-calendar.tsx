@@ -258,6 +258,32 @@ export function UnifiedCalendar() {
     () => rooms.filter((room) => room.status === "active"),
     [rooms],
   );
+  // Reservas existem no banco pra qualquer data futura, mas a grade só
+  // renderiza os dias em `days` — uma reserva cujo período não cruza a
+  // janela visível simplesmente não aparece em lugar nenhum na tela, sem
+  // aviso algum. Isso já causou confusão real (reserva criada com sucesso,
+  // mas "sumida" do calendário só porque o check-in é além dos dias exibidos).
+  const rangeEnd = useMemo(
+    () => addDays(gridStart, daysVisible),
+    [gridStart, daysVisible],
+  );
+  const outOfRangeReservations = useMemo(
+    () =>
+      visibleReservations.filter((reservation) => {
+        const start = new Date(reservation.checkIn);
+        const end = new Date(reservation.checkOut);
+        return !(start < rangeEnd && end > gridStart);
+      }),
+    [visibleReservations, gridStart, rangeEnd],
+  );
+  const nextOutOfRangeReservation = useMemo(() => {
+    const upcoming = outOfRangeReservations
+      .filter((reservation) => new Date(reservation.checkIn) >= gridStart)
+      .sort(
+        (a, b) => new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime(),
+      );
+    return upcoming[0] ?? outOfRangeReservations[0] ?? null;
+  }, [outOfRangeReservations, gridStart]);
   const manualEntriesCount = useMemo(
     () =>
       visibleReservations.filter(
@@ -603,6 +629,37 @@ export function UnifiedCalendar() {
             onSetGridStart={setGridStart}
             onSetDaysVisible={setDaysVisible}
           />
+
+          {outOfRangeReservations.length > 0 && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+              <span>
+                {outOfRangeReservations.length}{" "}
+                {outOfRangeReservations.length === 1
+                  ? "reserva não aparece"
+                  : "reservas não aparecem"}{" "}
+                na grade abaixo porque o período dela está fora dos dias
+                exibidos no momento.
+              </span>
+              {nextOutOfRangeReservation && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setGridStart(
+                      addDays(new Date(nextOutOfRangeReservation.checkIn), -2),
+                    )
+                  }
+                  className="rounded-xl border border-amber-400/30 px-3 py-1.5 font-medium text-amber-100 transition hover:border-amber-400/50"
+                >
+                  Ver reserva de{" "}
+                  {new Intl.DateTimeFormat("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  }).format(new Date(nextOutOfRangeReservation.checkIn))}
+                </button>
+              )}
+            </div>
+          )}
 
           <CalendarGrid
             rooms={activeRooms}

@@ -34,12 +34,25 @@ export async function GET() {
       order: [["checkIn", "ASC"]],
     });
 
+    const formatDateOnly = (value: unknown): string => {
+      if (!value) {
+        return "";
+      }
+
+      const asString = value instanceof Date ? value.toISOString() : String(value);
+      return asString.slice(0, 10);
+    };
+
     const reservations = dbReservations.map((res: any) => ({
-      id: res.id.toString(),
+      // O id publico da reserva é o channexReservationId (ex: "manual_..."),
+      // o mesmo usado por updateReservation/deleteReservation — usar o id
+      // numérico do banco aqui quebra silenciosamente a edição de reservas
+      // abertas a partir do calendário ("Reserva não encontrada para este tenant").
+      id: res.channexReservationId ?? res.id.toString(),
       // 2. MUDANÇA: Usamos o localRoomId (ex: 'vm-standard') em vez do número
       roomId: res.room ? res.room.localRoomId : res.roomId,
-      checkIn: res.checkIn,
-      checkOut: res.checkOut,
+      checkIn: formatDateOnly(res.checkIn),
+      checkOut: formatDateOnly(res.checkOut),
       status: res.status,
       otaSource: res.otaSource || "manual",
       channelReference: res.channelReference || "Site Direto",

@@ -7,6 +7,7 @@ import { BedDouble, Settings2, Plus, Trash2, CircleDollarSign, Save, X, Edit2 } 
 import { useToast } from '@/components/toast-provider';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { formatCurrencyInput, parseCurrencyInput } from '@/lib/utils';
 import type { RoomClosurePeriod, RoomSeasonalRate } from '@/lib/room-policies';
 
 type RoomOperationalStatus = 'vacant' | 'cleaning' | 'awaiting_guest' | 'maintenance' | 'occupied';
@@ -166,14 +167,6 @@ export default function RoomsPage() {
   const PRESET_AMENITIES_MAP = new Map(
     PRESET_AMENITIES.map((amenity) => [normalizeAmenity(amenity), amenity]),
   );
-
-  const formatCurrency = (value: string) => {
-    const numericValue = value.replace(/\D/g, '');
-    if (!numericValue) return '';
-    const cents = numericValue.slice(-2) || '00';
-    const reais = numericValue.slice(0, -2) || '0';
-    return `${reais.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${cents}`;
-  };
 
   const parseStringArray = (input: unknown) => {
     if (Array.isArray(input)) {
@@ -346,7 +339,7 @@ export default function RoomsPage() {
 
     setEditRoom({
       name: room.name,
-      price: (room.price * 100).toString(),
+      price: formatCurrencyInput(String(Math.round(room.price * 100))),
       minStayNights: room.minStayNights?.toString() ?? '',
       minStayDays: room.minStayDays?.toString() ?? '',
       quantity: room.quantity.toString(),
@@ -380,8 +373,7 @@ export default function RoomsPage() {
       return;
     }
 
-    const priceInCents = parseInt(editRoom.price, 10);
-    const price = priceInCents / 100;
+    const price = parseCurrencyInput(editRoom.price);
     const minStayNights = editRoom.minStayNights ? parseInt(editRoom.minStayNights, 10) : null;
     const minStayDays = editRoom.minStayDays ? parseInt(editRoom.minStayDays, 10) : null;
     const quantity = parseInt(editRoom.quantity, 10);
@@ -518,7 +510,7 @@ export default function RoomsPage() {
   }
 
   const handlePriceChange = (roomId: string, value: string) => {
-    setEditingPrices((prev) => ({ ...prev, [roomId]: value }));
+    setEditingPrices((prev) => ({ ...prev, [roomId]: formatCurrencyInput(value) }));
   };
 
   const savePriceChange = async (roomId: string) => {
@@ -529,7 +521,7 @@ export default function RoomsPage() {
       const res = await fetch(`/api/tenant/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price: parseFloat(newPrice) }),
+        body: JSON.stringify({ price: parseCurrencyInput(newPrice) }),
       });
 
       if (res.ok) {
@@ -599,8 +591,7 @@ export default function RoomsPage() {
       return;
     }
 
-    const priceInCents = parseInt(newRoom.price, 10);
-    const price = priceInCents / 100;
+    const price = parseCurrencyInput(newRoom.price);
     const minStayNights = newRoom.minStayNights ? parseInt(newRoom.minStayNights, 10) : null;
     const minStayDays = newRoom.minStayDays ? parseInt(newRoom.minStayDays, 10) : null;
     const quantity = parseInt(newRoom.quantity, 10);
@@ -966,13 +957,12 @@ export default function RoomsPage() {
                 {/* Preço */}
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-400 text-sm font-medium">R$</span>
                     <input
-                      type="number"
-                      placeholder={String(room.price)}
+                      type="text"
+                      placeholder={formatCurrencyInput(String(Math.round(room.price * 100)))}
                       value={editingPrices[room.id] ?? ''}
                       onChange={(e) => handlePriceChange(room.id, e.target.value)}
-                      className="w-24 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+                      className="w-28 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
                     />
                     {editingPrices[room.id] && (
                       <button
@@ -1086,13 +1076,12 @@ export default function RoomsPage() {
                       Preço Diário (R$)
                     </span>
                     <input
-                      type="tel"
+                      type="text"
                       required
-                      placeholder="0,00"
-                      value={formatCurrency(newRoom.price)}
+                      placeholder="R$ 0,00"
+                      value={newRoom.price}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const rawValue = e.target.value.replace(/\D/g, '');
-                        setNewRoom({ ...newRoom, price: rawValue });
+                        setNewRoom({ ...newRoom, price: formatCurrencyInput(e.target.value) });
                       }}
                       className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                     />
@@ -1143,32 +1132,6 @@ export default function RoomsPage() {
                     />
                   </label>
                 </div>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-200">
-                    Tarifas sazonais em JSON
-                  </span>
-                  <textarea
-                    rows={5}
-                    value={newRoom.seasonalRatesJson}
-                    onChange={(e) => setNewRoom({ ...newRoom, seasonalRatesJson: e.target.value })}
-                    placeholder='[{"label":"Verão","startMonthDay":"12-20","endMonthDay":"02-28","price":580,"minStayNights":3}]'
-                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-200">
-                    Bloqueios e fechamentos em JSON
-                  </span>
-                  <textarea
-                    rows={5}
-                    value={newRoom.closurePeriodsJson}
-                    onChange={(e) => setNewRoom({ ...newRoom, closurePeriodsJson: e.target.value })}
-                    placeholder='[{"label":"Manutenção","startDate":"2026-08-01","endDate":"2026-08-05","kind":"blocked"}]'
-                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
-                  />
-                </label>
 
                 <label className="block">
                   <span className="text-sm font-medium text-slate-200">
@@ -1401,13 +1364,12 @@ export default function RoomsPage() {
                       Preço Diário (R$)
                     </span>
                     <input
-                      type="tel"
+                      type="text"
                       required
-                      placeholder="0,00"
-                      value={formatCurrency(editRoom.price)}
+                      placeholder="R$ 0,00"
+                      value={editRoom.price}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const rawValue = e.target.value.replace(/\D/g, '');
-                        setEditRoom({ ...editRoom, price: rawValue });
+                        setEditRoom({ ...editRoom, price: formatCurrencyInput(e.target.value) });
                       }}
                       className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                     />
@@ -1458,32 +1420,6 @@ export default function RoomsPage() {
                     />
                   </label>
                 </div>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-200">
-                    Tarifas sazonais em JSON
-                  </span>
-                  <textarea
-                    rows={5}
-                    value={editRoom.seasonalRatesJson}
-                    onChange={(e) => setEditRoom({ ...editRoom, seasonalRatesJson: e.target.value })}
-                    placeholder='[{"label":"Alta temporada","startMonthDay":"12-20","endMonthDay":"02-28","price":580,"minStayNights":3}]'
-                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-200">
-                    Bloqueios e fechamentos em JSON
-                  </span>
-                  <textarea
-                    rows={5}
-                    value={editRoom.closurePeriodsJson}
-                    onChange={(e) => setEditRoom({ ...editRoom, closurePeriodsJson: e.target.value })}
-                    placeholder='[{"label":"Fechamento anual","startDate":"2026-08-01","endDate":"2026-08-05","kind":"closed"}]'
-                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
-                  />
-                </label>
 
                 <label className="block">
                   <span className="text-sm font-medium text-slate-200">

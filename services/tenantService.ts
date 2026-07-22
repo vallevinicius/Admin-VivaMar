@@ -15,6 +15,15 @@ import {
   type RoomSeasonalRate,
 } from "@/lib/room-policies";
 
+// Sequelize devolve DataTypes.DATE como objeto Date (não a string original),
+// então `String(valor).slice(0, 10)` produz lixo como "Mon Mar 01" em vez de
+// "2026-03-01" — sempre usar esta função para extrair a data (YYYY-MM-DD).
+function formatDbDate(val: unknown): string {
+  if (!val) return "";
+  const str = typeof val === "string" ? val : new Date(val as string | number | Date).toISOString();
+  return str.substring(0, 10);
+}
+
 function parseJsonArray(input: unknown) {
   if (Array.isArray(input)) {
     return input.map((item) => String(item).trim()).filter((item) => item.length > 0);
@@ -113,11 +122,6 @@ function mapReservation(
   reservation: InstanceType<Awaited<ReturnType<typeof getDb>>["Reservation"]>,
   roomLocalRoomId: string,
 ): Reservation {
-  const formatDbDate = (val: any) => {
-    if (!val) return "";
-    const str = typeof val === "string" ? val : new Date(val).toISOString();
-    return str.substring(0, 10);
-  };
   return {
     id: reservation.channexReservationId,
     roomId: roomLocalRoomId,
@@ -348,7 +352,7 @@ export async function checkInReservation(tenantId: number, reservationId: string
   }
 
   const todayKey = toLocalDateKey(new Date());
-  const checkInKey = String(reservation.checkIn).slice(0, 10);
+  const checkInKey = formatDbDate(reservation.checkIn);
 
   if (checkInKey !== todayKey) {
     throw new Error("Check-in permitido somente na data de chegada da reserva.");
@@ -379,7 +383,7 @@ export async function checkOutReservation(tenantId: number, reservationId: strin
   }
 
   const todayKey = toLocalDateKey(new Date());
-  const checkOutKey = String(reservation.checkOut).slice(0, 10);
+  const checkOutKey = formatDbDate(reservation.checkOut);
 
   if (checkOutKey !== todayKey) {
     throw new Error("Check-out permitido somente na data de saída da reserva.");

@@ -19,6 +19,18 @@ function getGuestSource(value: unknown): GuestRecord['otaSource'] {
   return 'manual';
 }
 
+function formatDateOnly(value: unknown): string {
+  if (!value) {
+    return '';
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return String(value).slice(0, 10);
+}
+
 function getNightCount(checkIn: string, checkOut: string) {
   const start = new Date(`${checkIn}T00:00:00`).getTime();
   const end = new Date(`${checkOut}T00:00:00`).getTime();
@@ -54,8 +66,8 @@ export default async function GuestsPage() {
           ? (reservation.room as { localRoomId?: string; name?: string })
           : undefined;
       const roomId = room?.localRoomId ?? String(reservation.roomId ?? '');
-      const checkIn = String(reservation.checkIn ?? '').slice(0, 10);
-      const checkOut = String(reservation.checkOut ?? '').slice(0, 10);
+      const checkIn = formatDateOnly(reservation.checkIn);
+      const checkOut = formatDateOnly(reservation.checkOut);
 
       return {
         id: String(reservation.channexReservationId ?? reservation.id ?? ''),

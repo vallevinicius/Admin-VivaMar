@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Lock, RefreshCw, Tag, Trash2 } from "lucide-react";
 import { useToast } from "@/components/toast-provider";
-import { addDays, cn } from "@/lib/utils";
+import { addDays, cn, formatCurrencyInput, parseCurrencyInput } from "@/lib/utils";
 import { getRoomEffectivePrice } from "@/lib/room-policies";
 import type { Reservation, Room, RoomSeasonalRate } from "@/types/domain";
 
@@ -160,7 +160,7 @@ export function CalendarManagement() {
 
   useEffect(() => {
     if (selectedRoom) {
-      setNewPrice(String(selectedRoom.price));
+      setNewPrice(formatCurrencyInput(String(Math.round(selectedRoom.price * 100))));
       setSeasonalRatesDraft(
         Array.isArray(selectedRoom.seasonalRates) ? selectedRoom.seasonalRates : [],
       );
@@ -200,6 +200,28 @@ export function CalendarManagement() {
     [roomReservationsInWindow],
   );
 
+  // Mesmo problema do calendário principal: reservas do quarto selecionado
+  // que caem fora de [rangeStart, rangeEnd] não aparecem na linha do tempo
+  // abaixo, sem nenhum aviso — daí a sensação de "a reserva não foi pro
+  // calendário" quando na verdade só está fora da janela padrão (-7/+21 dias).
+  const roomReservationsOutOfWindow = useMemo(
+    () =>
+      reservations.filter(
+        (reservation) =>
+          reservation.roomId === selectedRoomId &&
+          reservation.status !== "cancelled" &&
+          !overlapsRange(reservation.checkIn, reservation.checkOut, rangeStart, rangeEnd),
+      ),
+    [reservations, selectedRoomId, rangeStart, rangeEnd],
+  );
+
+  const nextOutOfWindowReservation = useMemo(() => {
+    const upcoming = roomReservationsOutOfWindow
+      .filter((reservation) => reservation.checkIn >= todayDate)
+      .sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+    return upcoming[0] ?? roomReservationsOutOfWindow[0] ?? null;
+  }, [roomReservationsOutOfWindow, todayDate]);
+
   const canBlockFuture = blockStart >= todayDate && blockEnd > blockStart;
 
   const seasonalRatesSorted = useMemo(
@@ -225,7 +247,7 @@ export function CalendarManagement() {
       return;
     }
 
-    const numericRate = Number(rateValue);
+    const numericRate = parseCurrencyInput(rateValue);
     if (!Number.isFinite(numericRate) || numericRate < 0) {
       showToast("Informe uma tarifa válida para a regra.");
       return;
@@ -291,7 +313,7 @@ export function CalendarManagement() {
       return;
     }
 
-    const numericPrice = Number(weekRatePrice);
+    const numericPrice = parseCurrencyInput(weekRatePrice);
     if (!Number.isFinite(numericPrice) || numericPrice < 0) {
       showToast("Informe uma tarifa válida.");
       return;
@@ -433,7 +455,7 @@ export function CalendarManagement() {
       return;
     }
 
-    const numericPrice = Number(newPrice);
+    const numericPrice = parseCurrencyInput(newPrice);
     if (!Number.isFinite(numericPrice) || numericPrice < 0) {
       showToast("Informe um valor de tarifa válido.");
       return;
@@ -641,11 +663,10 @@ export function CalendarManagement() {
                 Nova tarifa (R$)
               </span>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                placeholder="R$ 0,00"
                 value={newPrice}
-                onChange={(event) => setNewPrice(event.target.value)}
+                onChange={(event) => setNewPrice(formatCurrencyInput(event.target.value))}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
@@ -715,12 +736,10 @@ export function CalendarManagement() {
               Tarifa (R$)
             </span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
               value={weekRatePrice}
-              onChange={(event) => setWeekRatePrice(event.target.value)}
-              placeholder="Ex.: 350"
+              onChange={(event) => setWeekRatePrice(formatCurrencyInput(event.target.value))}
+              placeholder="R$ 0,00"
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-violet-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
@@ -803,11 +822,10 @@ export function CalendarManagement() {
               Tarifa (R$)
             </span>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              placeholder="R$ 0,00"
               value={rateValue}
-              onChange={(event) => setRateValue(event.target.value)}
+              onChange={(event) => setRateValue(formatCurrencyInput(event.target.value))}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
@@ -896,6 +914,40 @@ export function CalendarManagement() {
             </span>
           </div>
         </div>
+
+        {roomReservationsOutOfWindow.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/30 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+            <span>
+              {roomReservationsOutOfWindow.length}{" "}
+              {roomReservationsOutOfWindow.length === 1
+                ? "reserva deste quarto não aparece"
+                : "reservas deste quarto não aparecem"}{" "}
+              na linha do tempo porque o período está fora do intervalo
+              selecionado acima.
+            </span>
+            {nextOutOfWindowReservation && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRangeStart(
+                    toDateInputValue(addDays(parseDateOnly(nextOutOfWindowReservation.checkIn), -2)),
+                  );
+                  setRangeEnd(
+                    toDateInputValue(addDays(parseDateOnly(nextOutOfWindowReservation.checkOut), 2)),
+                  );
+                }}
+                className="rounded-xl border border-amber-400/40 px-3 py-1.5 font-medium transition hover:border-amber-400/60"
+              >
+                Ver reserva de{" "}
+                {new Intl.DateTimeFormat("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                }).format(parseDateOnly(nextOutOfWindowReservation.checkIn))}
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 overflow-x-auto">
           <div className="grid min-w-[920px] gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(days.length, 1)}, minmax(56px, 1fr))` }}>
