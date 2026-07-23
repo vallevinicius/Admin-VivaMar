@@ -4,11 +4,13 @@ import { NextResponse } from 'next/server';
 import type { Transaction } from 'sequelize';
 import type { TenantPlan } from '@/models/Tenant';
 import { getDb } from '@/lib/db';
+import { generateUniqueTenantSlug } from '@/lib/tenant-slug';
 
 const validPlans: TenantPlan[] = ['basic', 'pro', 'premium'];
 
 type ProvisionPayload = {
   tenantName?: string;
+  slug?: string;
   adminEmail?: string;
   adminPassword?: string;
   plan?: string;
@@ -54,9 +56,17 @@ export async function POST(request: Request) {
 
   try {
     await sequelize.transaction(async (transaction: Transaction) => {
+      const slug = payload.slug
+        ? payload.slug
+        : await generateUniqueTenantSlug(payload.tenantName!, async (candidate) => {
+            const existing = await Tenant.findOne({ where: { slug: candidate }, transaction });
+            return Boolean(existing);
+          });
+
       const tenant = await Tenant.create(
         {
           name: payload.tenantName!,
+          slug,
           plan: payload.plan as TenantPlan,
         },
         { transaction },

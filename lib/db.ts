@@ -1,5 +1,6 @@
 import { initializeModels, createSequelizeClient } from '@/models';
 import { DataTypes } from 'sequelize';
+import { generateUniqueTenantSlug } from '@/lib/tenant-slug';
 
 export type DbModels = ReturnType<typeof initializeModels>;
 
@@ -72,6 +73,33 @@ async function ensureReservationStayColumns(models: DbModels) {
       allowNull: true,
       defaultValue: null,
     });
+  }
+}
+
+async function ensureTenantSlugColumn(models: DbModels) {
+  const queryInterface = models.sequelize.getQueryInterface();
+  const table = await queryInterface.describeTable('tenants');
+
+  if (!table.slug) {
+    await queryInterface.addColumn('tenants', 'slug', {
+      type: DataTypes.STRING(160),
+      allowNull: true,
+      unique: true,
+    });
+  }
+
+  // Preenche o slug de tenants antigos (criados antes desta coluna existir)
+  // a partir do nome, para que as rotas públicas possam identificá-los sem
+  // depender do id numérico interno.
+  const tenantsWithoutSlug = await models.Tenant.findAll({ where: { slug: null } });
+
+  for (const tenant of tenantsWithoutSlug) {
+    const slug = await generateUniqueTenantSlug(tenant.name, async (candidate) => {
+      const existing = await models.Tenant.findOne({ where: { slug: candidate } });
+      return Boolean(existing);
+    });
+
+    await tenant.update({ slug });
   }
 }
 
@@ -161,6 +189,7 @@ export async function getDb(): Promise<DbModels> {
         await ensureUserTeamColumns(global.__sequelizeModels);
         await ensureReservationUnitNumberColumn(global.__sequelizeModels);
         await ensureReservationStayColumns(global.__sequelizeModels);
+        await ensureTenantSlugColumn(global.__sequelizeModels);
       }
 
       return global.__sequelizeModels;

@@ -6,7 +6,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 export const authConfig = {
-  cookieName: 'vivamar_session',
+  cookieName: 'sancho_session',
   tokenTtlSeconds: 60 * 60 * 8,
 };
 

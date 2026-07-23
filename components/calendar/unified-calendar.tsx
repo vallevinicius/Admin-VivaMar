@@ -188,7 +188,7 @@ function getToday() {
   today.setHours(0, 0, 0, 0);
   return today;
 }
-export function UnifiedCalendar() {
+export function UnifiedCalendar({ tenantName }: { tenantName: string }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -607,6 +607,7 @@ export function UnifiedCalendar() {
     <>
       <div className="space-y-6">
         <CalendarHeader
+          tenantName={tenantName}
           onNewEntry={() => openManualEntryModal()}
           onLogout={handleLogout}
         />

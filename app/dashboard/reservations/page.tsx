@@ -254,7 +254,7 @@ export default function ReservationsPage() {
       <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Recepção Viva Mar</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Recepção</p>
             <h2 className="mt-3 text-3xl font-semibold text-white">Reservas</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
               Gerencie todas as reservas da pousada. Crie novas reservas, acompanhe o status de cada hóspede e mantenha o calendário sempre atualizado.

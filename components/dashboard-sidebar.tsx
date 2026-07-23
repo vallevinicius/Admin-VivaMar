@@ -69,7 +69,7 @@ export function DashboardSidebar({
     <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 pb-5 dark:border-white/10">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-600 dark:text-sky-300">
-          Pousada Viva Mar
+          Pousada Sancho
         </p>
         <h1 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-white">
           {tenantName}
@@ -129,7 +129,7 @@ export function DashboardSidebar({
       <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/85 lg:hidden">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-sky-600 dark:text-sky-300">
-            Pousada Viva Mar
+            Pousada Sancho
           </p>
           <p className="text-sm font-semibold text-slate-900 dark:text-white">{tenantName}</p>
         </div>

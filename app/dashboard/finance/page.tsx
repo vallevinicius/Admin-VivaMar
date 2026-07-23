@@ -44,8 +44,8 @@ export default async function FinancePage() {
       <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Financeiro Viva Mar</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Saúde financeira da Pousada Viva Mar</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Financeiro</p>
+            <h2 className="mt-3 text-3xl font-semibold text-white">Saúde financeira da {session.tenantName}</h2>
           </div>
           <ExpenseModalForm />
         </div>

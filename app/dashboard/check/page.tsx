@@ -295,8 +295,8 @@ export default function CheckPage() {
       <section className="rounded-[28px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/20">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Recepção Viva Mar</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Check-in e Check-out com reservas reais</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">Recepção</p>
+            <h2 className="mt-3 text-3xl font-semibold text-white">Check-in e Check-out</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
               A lista agora vem do banco de dados do tenant. A criação de novas reservas foi movida para a aba Reserva.
             </p>

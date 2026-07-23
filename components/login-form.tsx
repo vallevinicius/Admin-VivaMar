@@ -4,9 +4,13 @@ import { motion } from 'framer-motion';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 
+const SHOW_DEMO_LOGIN = process.env.NEXT_PUBLIC_SHOW_DEMO_LOGIN === 'true';
+const DEMO_EMAIL = 'gestao@pousadavivamar.com';
+const DEMO_PASSWORD = 'vivamar123';
+
 export function LoginForm() {
-  const [email, setEmail] = useState('gestao@pousadavivamar.com');
-  const [password, setPassword] = useState('vivamar123');
+  const [email, setEmail] = useState(SHOW_DEMO_LOGIN ? DEMO_EMAIL : '');
+  const [password, setPassword] = useState(SHOW_DEMO_LOGIN ? DEMO_PASSWORD : '');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -62,7 +66,7 @@ export function LoginForm() {
         <span className="inline-flex rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
           Sistema de Gestão de Reservas
         </span>
-        <h1 className="text-3xl font-semibold text-white">Bem-vindo à Pousada Viva Mar</h1>
+        <h1 className="text-3xl font-semibold text-white">Bem-vindo de volta</h1>
         <p className="text-sm leading-6 text-slate-300">
           Entre para acompanhar a ocupação, organizar bloqueios e manter o calendário da sua hospedagem sempre atualizado.
         </p>
@@ -111,11 +115,13 @@ export function LoginForm() {
         Acessar painel
       </motion.button>
 
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-        <p className="font-medium text-white">Acesso de demonstração</p>
-        <p>E-mail: gestao@pousadavivamar.com</p>
-        <p>Senha: vivamar123</p>
-      </div>
+      {SHOW_DEMO_LOGIN ? (
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+          <p className="font-medium text-white">Acesso de demonstração</p>
+          <p>E-mail: {DEMO_EMAIL}</p>
+          <p>Senha: {DEMO_PASSWORD}</p>
+        </div>
+      ) : null}
     </motion.form>
   );
 }

@@ -6,6 +6,7 @@ export type TenantStatus = 'active' | 'suspended';
 export type TenantAttributes = {
   id: number;
   name: string;
+  slug: string | null;
   document: string | null;
   plan: TenantPlan;
   status: TenantStatus;
@@ -13,11 +14,12 @@ export type TenantAttributes = {
   updatedAt?: Date;
 };
 
-export type TenantCreationAttributes = Optional<TenantAttributes, 'id' | 'document' | 'plan' | 'status' | 'createdAt' | 'updatedAt'>;
+export type TenantCreationAttributes = Optional<TenantAttributes, 'id' | 'slug' | 'document' | 'plan' | 'status' | 'createdAt' | 'updatedAt'>;
 
 export class Tenant extends Model<TenantAttributes, TenantCreationAttributes> implements TenantAttributes {
   declare id: number;
   declare name: string;
+  declare slug: string | null;
   declare document: string | null;
   declare plan: TenantPlan;
   declare status: TenantStatus;
@@ -35,6 +37,14 @@ export class Tenant extends Model<TenantAttributes, TenantCreationAttributes> im
         name: {
           type: DataTypes.STRING(160),
           allowNull: false,
+        },
+        // Identificador público e estável da pousada (ex.: "viva-mar"), usado
+        // pelas rotas públicas para saber qual tenant servir sem depender do
+        // id numérico interno nem de "primeiro tenant do banco" como fallback.
+        slug: {
+          type: DataTypes.STRING(160),
+          allowNull: true,
+          unique: true,
         },
         document: {
           type: DataTypes.STRING(40),

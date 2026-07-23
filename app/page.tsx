@@ -28,7 +28,7 @@ export default function LoginPage() {
             Gestão exclusiva para hotelaria
           </span>
           <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-            Organize as reservas da Pousada Viva Mar com mais clareza e tranquilidade.
+            Organize as reservas da sua pousada com mais clareza e tranquilidade.
           </h1>
           <p className="max-w-lg text-base leading-7 text-slate-300">
             Acompanhe disponibilidade, bloqueios e movimentações do calendário em uma experiência pensada para o dia a dia da sua operação.

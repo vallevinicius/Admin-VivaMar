@@ -1,23 +1,24 @@
 import { CalendarPlus2, LogOut } from "lucide-react";
 
 interface CalendarHeaderProps {
+  tenantName: string;
   onNewEntry: () => void;
   onLogout: () => void;
 }
 
-export function CalendarHeader({ onNewEntry, onLogout }: CalendarHeaderProps) {
+export function CalendarHeader({ tenantName, onNewEntry, onLogout }: CalendarHeaderProps) {
   return (
     <section className="rounded-[30px] border border-white/10 bg-slate-900/85 p-6 shadow-2xl shadow-slate-950/20">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-sky-300">
-            Calendário Viva Mar
+            Calendário
           </p>
           <h2 className="mt-3 text-3xl font-semibold text-white">
-            Painel de disponibilidade da Pousada Viva Mar
+            Painel de disponibilidade da {tenantName}
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-            Acompanhe a ocupação da Pousada Viva Mar, visualize mais períodos e
+            Acompanhe a ocupação da sua pousada, visualize mais períodos e
             modere reservas sem sair da grade.
           </p>
         </div>
