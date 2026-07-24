@@ -118,6 +118,17 @@ function mapRoom(
   };
 }
 
+function mapGalleryPhoto(
+  photo: InstanceType<Awaited<ReturnType<typeof getDb>>["PropertyPhoto"]>,
+) {
+  return {
+    id: photo.id,
+    url: photo.url,
+    caption: photo.caption,
+    sortOrder: photo.sortOrder,
+  };
+}
+
 function mapReservation(
   reservation: InstanceType<Awaited<ReturnType<typeof getDb>>["Reservation"]>,
   roomLocalRoomId: string,
@@ -204,6 +215,24 @@ export async function getRooms(tenantId: number): Promise<Room[]> {
       return getDemoRooms();
     }
 
+    return [];
+  }
+}
+
+export async function getGalleryPhotos(tenantId: number) {
+  try {
+    const { PropertyPhoto } = await getDb();
+    const photos = await PropertyPhoto.findAll({
+      where: { tenantId },
+      order: [
+        ["sortOrder", "ASC"],
+        ["id", "ASC"],
+      ],
+    });
+
+    return photos.map((photo) => mapGalleryPhoto(photo));
+  } catch (error) {
+    console.error("[tenantService] Falha ao carregar galeria:", error);
     return [];
   }
 }

@@ -7,6 +7,7 @@ export type DashboardFeatureKey =
   | 'reservations'
   | 'check'
   | 'rooms'
+  | 'gallery'
   | 'team'
   | 'finance'
   | 'guests';
@@ -56,6 +57,12 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     href: '/dashboard/rooms',
     label: 'Quartos',
     description: 'Status operacional e governanca',
+  },
+  {
+    key: 'gallery',
+    href: '/dashboard/gallery',
+    label: 'Galeria',
+    description: 'Fotos gerais da pousada exibidas no site',
   },
   {
     key: 'team',
