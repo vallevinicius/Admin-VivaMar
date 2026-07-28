@@ -5,8 +5,11 @@ import { getDb } from '@/lib/db';
 
 const validStatuses: TenantStatus[] = ['active', 'suspended'];
 
+// "identificador" é o nome de campo genérico usado pela integração de
+// moderação de acesso do Total Software (funciona com qualquer projeto
+// externo) — aqui corresponde ao slug do tenant.
 type StatusPayload = {
-  tenantSlug?: string;
+  identificador?: string;
   status?: string;
   webhookSecret?: string;
 };
@@ -38,12 +41,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Webhook inválido.' }, { status: 401 });
   }
 
-  if (!payload.tenantSlug || !validStatuses.includes(payload.status as TenantStatus)) {
+  if (!payload.identificador || !validStatuses.includes(payload.status as TenantStatus)) {
     return NextResponse.json({ message: 'Payload incompleto ou status inválido.' }, { status: 400 });
   }
 
   const { Tenant } = await getDb();
-  const tenant = await Tenant.findOne({ where: { slug: payload.tenantSlug } });
+  const tenant = await Tenant.findOne({ where: { slug: payload.identificador } });
 
   if (!tenant) {
     return NextResponse.json({ message: 'Tenant não encontrado.' }, { status: 404 });

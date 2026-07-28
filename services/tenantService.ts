@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { toPublicUploadUrl } from "@/lib/uploads";
 import {
   DEMO_TENANT_ID,
   getDemoRooms,
@@ -96,7 +97,7 @@ function mapRoom(
   room: InstanceType<Awaited<ReturnType<typeof getDb>>["Room"]>,
 ): Room {
   const amenitiesList = parseJsonArray(room.amenities);
-  const photoUrls = parseJsonArray(room.photoUrls);
+  const photoUrls = parseJsonArray(room.photoUrls).map(toPublicUploadUrl);
   const seasonalRates = parseSeasonalRates(room.seasonalRates);
   const closurePeriods = parseClosurePeriods(room.closurePeriods);
 
@@ -123,7 +124,7 @@ function mapGalleryPhoto(
 ) {
   return {
     id: photo.id,
-    url: photo.url,
+    url: toPublicUploadUrl(photo.url),
     caption: photo.caption,
     sortOrder: photo.sortOrder,
   };
