@@ -4,6 +4,7 @@ export type DashboardFeatureKey =
   | 'calendar'
   | 'calendar_management'
   | 'promotions'
+  | 'addons'
   | 'reservations'
   | 'check'
   | 'rooms'
@@ -39,6 +40,12 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     href: '/dashboard/promotions',
     label: 'Promocoes',
     description: 'Gerenciamento de cupons e descontos',
+  },
+  {
+    key: 'addons',
+    href: '/dashboard/addons',
+    label: 'Pacotes & Adicionais',
+    description: 'Itens extras oferecidos na reserva (decoração, jantar, spa...)',
   },
   {
     key: 'reservations',
