@@ -1,4 +1,4 @@
-# Pousada Viva Mar - SaaS
+# Pousada Viva Mar - ADMIN
 
 SaaS de gestão para a Pousada Viva Mar: reservas, quartos, calendário, financeiro, equipe e hóspedes.
 
