@@ -74,9 +74,10 @@ export class User
           defaultValue: "",
         },
         email: {
+          // Unicidade garantida por migracao idempotente (lib/db.ts,
+          // ensureUniqueIndexes) — ver comentario equivalente em Room.ts.
           type: DataTypes.STRING(160),
           allowNull: false,
-          unique: true,
           validate: {
             isEmail: true,
           },

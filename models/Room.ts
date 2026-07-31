@@ -56,15 +56,18 @@ export class Room
           primaryKey: true,
         },
         localRoomId: {
+          // O unico e garantido por uma migracao idempotente em lib/db.ts
+          // (ensureUniqueIndexes), nao por "unique: true" aqui — o
+          // sync({alter:true}) recria esse indice a cada cold start sem
+          // remover o anterior, e o MySQL tem limite de 64 chaves por
+          // tabela (ja estourou uma vez nesta tabela).
           type: DataTypes.STRING(60),
           allowNull: false,
-          unique: true,
           field: "local_room_id",
         },
         channexRoomTypeId: {
           type: DataTypes.STRING(80),
           allowNull: false,
-          unique: true,
           field: "channex_room_type_id",
         },
         name: {

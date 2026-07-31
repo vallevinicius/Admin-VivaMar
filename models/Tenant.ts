@@ -41,10 +41,11 @@ export class Tenant extends Model<TenantAttributes, TenantCreationAttributes> im
         // Identificador público e estável da pousada (ex.: "viva-mar"), usado
         // pelas rotas públicas para saber qual tenant servir sem depender do
         // id numérico interno nem de "primeiro tenant do banco" como fallback.
+        // Unicidade garantida por migracao idempotente (lib/db.ts,
+        // ensureUniqueIndexes) — ver comentario equivalente em Room.ts.
         slug: {
           type: DataTypes.STRING(160),
           allowNull: true,
-          unique: true,
         },
         document: {
           type: DataTypes.STRING(40),

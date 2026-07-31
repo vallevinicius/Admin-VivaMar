@@ -96,9 +96,10 @@ export class Reservation
           },
         },
         channexReservationId: {
+          // Unicidade garantida por migracao idempotente (lib/db.ts,
+          // ensureUniqueIndexes) — ver comentario equivalente em Room.ts.
           type: DataTypes.STRING(100),
           allowNull: false,
-          unique: true,
           field: "channex_reservation_id",
         },
         otaSource: {
