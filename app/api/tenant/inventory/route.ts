@@ -64,6 +64,7 @@ export async function GET() {
         phone: res.guestPhone || "",
       },
       notes: res.notes || "",
+      unitNumber: res.unitNumber ?? null,
     }));
 
     return NextResponse.json(

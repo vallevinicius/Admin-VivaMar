@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRooms } from "@/services/tenantService";
+import { getAvailableRooms } from "@/services/tenantService";
 import { resolvePublicTenantId } from "@/lib/public-tenant";
 
 const corsHeaders = {
@@ -16,6 +16,10 @@ function removeInternalRoomFields(room: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const checkIn = searchParams.get("checkIn");
+    const checkOut = searchParams.get("checkOut");
+
     const tenantId = await resolvePublicTenantId(request);
 
     if (!tenantId) {
@@ -28,7 +32,13 @@ export async function GET(request: Request) {
       );
     }
 
-    const rooms = (await getRooms(tenantId)).map((room) => removeInternalRoomFields(room as Record<string, unknown>));
+    // Recalcula preço/disponibilidade pela data (tarifa sazonal, fechamentos,
+    // unidades ocupadas) quando checkIn/checkOut são informados — antes esta
+    // rota sempre devolvia o preço base do quarto, ignorando qualquer tarifa
+    // por período mesmo quando a busca pública informava as datas.
+    const rooms = (await getAvailableRooms(tenantId, checkIn || undefined, checkOut || undefined)).map((room) =>
+      removeInternalRoomFields(room as Record<string, unknown>),
+    );
 
     return NextResponse.json(rooms, {
       status: 200,

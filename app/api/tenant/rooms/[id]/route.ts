@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 import { parseMaybeNumber, parseRoomPolicyArray, type RoomClosurePeriod, type RoomSeasonalRate } from "@/lib/room-policies";
+import { toPublicUploadUrl } from "@/lib/uploads";
+import { BED_TYPES, type BedType, type RoomBed } from "@/types/domain";
 
 function sanitizeStringArray(input: unknown) {
   if (!Array.isArray(input)) {
@@ -61,6 +63,19 @@ function sanitizeSeasonalRates(input: unknown): RoomSeasonalRate[] {
       minStayNights: parseMaybeNumber(item.minStayNights ?? item.min_stay_nights),
       minStayDays: parseMaybeNumber(item.minStayDays ?? item.min_stay_days),
     };
+  });
+}
+
+function sanitizeBeds(input: unknown): RoomBed[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const type = String(item.type ?? "").trim() as BedType;
+    const quantity = Number(item.quantity);
+
+    if (!BED_TYPES.includes(type) || !Number.isInteger(quantity) || quantity < 1) {
+      return null;
+    }
+
+    return { type, quantity };
   });
 }
 
@@ -208,6 +223,11 @@ export async function PATCH(
       updates.closurePeriods = closurePeriods.length > 0 ? JSON.stringify(closurePeriods) : null;
     }
 
+    if (body.beds !== undefined) {
+      const beds = sanitizeBeds(body.beds);
+      updates.beds = beds.length > 0 ? JSON.stringify(beds) : null;
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "Nenhum campo válido para atualizar" }, { status: 400 });
     }
@@ -227,9 +247,10 @@ export async function PATCH(
         quantity: room.quantity,
         amenities: room.amenities,
         amenitiesList: parseStringArray(room.amenities),
-        photoUrls: parseStringArray(room.photoUrls),
+        photoUrls: parseStringArray(room.photoUrls).map(toPublicUploadUrl),
         seasonalRates: parseStoredPolicyArray<RoomSeasonalRate>(room.seasonalRates),
         closurePeriods: parseStoredPolicyArray<RoomClosurePeriod>(room.closurePeriods),
+        beds: parseStoredPolicyArray<RoomBed>(room.beds),
       },
       { status: 200 },
     );

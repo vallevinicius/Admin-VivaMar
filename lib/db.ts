@@ -40,6 +40,15 @@ async function ensureRoomAmenitiesColumn(models: DbModels) {
       comment: 'JSON array de URLs das fotos',
     });
   }
+
+  if (!table.beds) {
+    await models.sequelize.getQueryInterface().addColumn('rooms', 'beds', {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'JSON array de camas: [{ type, quantity }]',
+    });
+  }
 }
 
 async function ensureReservationUnitNumberColumn(models: DbModels) {

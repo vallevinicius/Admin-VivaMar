@@ -4,7 +4,7 @@ import {
   DEMO_TENANT_ID,
   getDemoRooms,
 } from "@/services/demoData";
-import type { Expense, Reservation, Room } from "@/types/domain";
+import { BED_TYPES, type BedType, type Expense, type Reservation, type Room, type RoomBed } from "@/types/domain";
 import { Op } from "sequelize";
 import {
   differenceInNights,
@@ -93,6 +93,19 @@ function parseClosurePeriods(input: unknown): RoomClosurePeriod[] {
   });
 }
 
+function parseRoomBeds(input: unknown): RoomBed[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const type = String(item.type ?? "").trim() as BedType;
+    const quantity = Number(item.quantity);
+
+    if (!BED_TYPES.includes(type) || !Number.isInteger(quantity) || quantity < 1) {
+      return null;
+    }
+
+    return { type, quantity };
+  });
+}
+
 function mapRoom(
   room: InstanceType<Awaited<ReturnType<typeof getDb>>["Room"]>,
 ): Room {
@@ -100,6 +113,7 @@ function mapRoom(
   const photoUrls = parseJsonArray(room.photoUrls).map(toPublicUploadUrl);
   const seasonalRates = parseSeasonalRates(room.seasonalRates);
   const closurePeriods = parseClosurePeriods(room.closurePeriods);
+  const beds = parseRoomBeds(room.beds);
 
   return {
     id: room.localRoomId,
@@ -112,6 +126,7 @@ function mapRoom(
     minStayDays: room.minStayDays ?? null,
     seasonalRates,
     closurePeriods,
+    beds,
     quantity: room.quantity,
     amenities: room.amenities,
     amenitiesList,
@@ -151,6 +166,7 @@ function mapReservation(
       cpf: reservation.guestCpf ?? undefined,
     },
     notes: reservation.notes,
+    unitNumber: reservation.unitNumber ?? null,
   };
 }
 
@@ -362,65 +378,77 @@ function toLocalDateKey(date: Date) {
 }
 
 export async function checkInReservation(tenantId: number, reservationId: string) {
-  const { Reservation } = await getDb();
+  const { sequelize, Reservation } = await getDb();
   const parsedId = Number(reservationId);
 
-  const reservation = await Reservation.findOne({
-    where: { tenantId, id: Number.isInteger(parsedId) ? parsedId : -1 },
+  // Trava a linha da reserva dentro da transação: sem isso, dois cliques
+  // (ou dois pedidos) quase simultâneos no botão de check-in liam
+  // checkedInAt como null nos dois, e ambos passavam pela validação e
+  // gravavam — gerando dois registros de "check-in realizado" idênticos.
+  return sequelize.transaction(async (transaction) => {
+    const reservation = await Reservation.findOne({
+      where: { tenantId, id: Number.isInteger(parsedId) ? parsedId : -1 },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!reservation) {
+      throw new Error("Reserva não encontrada para este tenant.");
+    }
+
+    if (reservation.status === "cancelled") {
+      throw new Error("Não é possível fazer check-in de uma reserva cancelada.");
+    }
+
+    if (reservation.checkedInAt) {
+      throw new Error("Check-in já realizado para esta reserva.");
+    }
+
+    const todayKey = toLocalDateKey(new Date());
+    const checkInKey = formatDbDate(reservation.checkIn);
+
+    if (checkInKey !== todayKey) {
+      throw new Error("Check-in permitido somente na data de chegada da reserva.");
+    }
+
+    await reservation.update({ checkedInAt: new Date() }, { transaction });
+    return reservation.toJSON();
   });
-
-  if (!reservation) {
-    throw new Error("Reserva não encontrada para este tenant.");
-  }
-
-  if (reservation.status === "cancelled") {
-    throw new Error("Não é possível fazer check-in de uma reserva cancelada.");
-  }
-
-  if (reservation.checkedInAt) {
-    throw new Error("Check-in já realizado para esta reserva.");
-  }
-
-  const todayKey = toLocalDateKey(new Date());
-  const checkInKey = formatDbDate(reservation.checkIn);
-
-  if (checkInKey !== todayKey) {
-    throw new Error("Check-in permitido somente na data de chegada da reserva.");
-  }
-
-  await reservation.update({ checkedInAt: new Date() });
-  return reservation.toJSON();
 }
 
 export async function checkOutReservation(tenantId: number, reservationId: string) {
-  const { Reservation } = await getDb();
+  const { sequelize, Reservation } = await getDb();
   const parsedId = Number(reservationId);
 
-  const reservation = await Reservation.findOne({
-    where: { tenantId, id: Number.isInteger(parsedId) ? parsedId : -1 },
+  return sequelize.transaction(async (transaction) => {
+    const reservation = await Reservation.findOne({
+      where: { tenantId, id: Number.isInteger(parsedId) ? parsedId : -1 },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!reservation) {
+      throw new Error("Reserva não encontrada para este tenant.");
+    }
+
+    if (!reservation.checkedInAt) {
+      throw new Error("Não é possível fazer check-out sem check-in registrado.");
+    }
+
+    if (reservation.checkedOutAt) {
+      throw new Error("Check-out já realizado para esta reserva.");
+    }
+
+    const todayKey = toLocalDateKey(new Date());
+    const checkOutKey = formatDbDate(reservation.checkOut);
+
+    if (checkOutKey !== todayKey) {
+      throw new Error("Check-out permitido somente na data de saída da reserva.");
+    }
+
+    await reservation.update({ checkedOutAt: new Date() }, { transaction });
+    return reservation.toJSON();
   });
-
-  if (!reservation) {
-    throw new Error("Reserva não encontrada para este tenant.");
-  }
-
-  if (!reservation.checkedInAt) {
-    throw new Error("Não é possível fazer check-out sem check-in registrado.");
-  }
-
-  if (reservation.checkedOutAt) {
-    throw new Error("Check-out já realizado para esta reserva.");
-  }
-
-  const todayKey = toLocalDateKey(new Date());
-  const checkOutKey = formatDbDate(reservation.checkOut);
-
-  if (checkOutKey !== todayKey) {
-    throw new Error("Check-out permitido somente na data de saída da reserva.");
-  }
-
-  await reservation.update({ checkedOutAt: new Date() });
-  return reservation.toJSON();
 }
 
 export async function deleteReservation(
@@ -601,6 +629,12 @@ export async function getAvailableRooms(
     return {
       ...roomData,
       price: effectivePrice,
+      // Mínimo de estadia efetivo para a data pesquisada — uma tarifa
+      // sazonal pode exigir mais noites que o padrão do quarto (ex.:
+      // Réveillon), então o valor base do quarto sozinho não é suficiente
+      // para a busca pública saber a regra que realmente vale aqui.
+      minStayNights: minimumStay.nights > 0 ? minimumStay.nights : null,
+      minStayDays: minimumStay.days > 0 ? minimumStay.days : null,
       remainingQuantity: closure || isShortStay ? 0 : remaining,
     };
   });

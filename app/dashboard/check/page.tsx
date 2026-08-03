@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardCheck, DoorOpen, Search, UserRoundPlus } from 'lucide-react';
 
 type StayStatus = 'reserved' | 'checked_in' | 'checked_out';
@@ -132,10 +132,12 @@ export default function CheckPage() {
   const [stays, setStays] = useState<Stay[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | StayStatus>('all');
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<{ id: number; text: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [todayKey, setTodayKey] = useState(() => toLocalDateKey(new Date()));
+  const [processingStayId, setProcessingStayId] = useState<string | null>(null);
+  const nextLogIdRef = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -231,10 +233,15 @@ export default function CheckPage() {
       second: '2-digit',
     }).format(new Date());
 
-    setLogs((prev) => [`${time} - ${message}`, ...prev].slice(0, 8));
+    const id = nextLogIdRef.current++;
+    setLogs((prev) => [{ id, text: `${time} - ${message}` }, ...prev].slice(0, 8));
   }
 
   async function handleCheckIn(stayId: string) {
+    if (processingStayId) {
+      return;
+    }
+
     const current = stays.find((stay) => stay.id === stayId);
     if (!current || current.status !== 'reserved') {
       return;
@@ -245,6 +252,7 @@ export default function CheckPage() {
       return;
     }
 
+    setProcessingStayId(stayId);
     try {
       const response = await fetch(`/api/tenant/reservations/${stayId}/check-in`, { method: 'POST' });
       const payload = (await response.json()) as { reservation?: { checkedInAt?: string }; message?: string };
@@ -258,10 +266,16 @@ export default function CheckPage() {
       pushLog(`Check-in realizado para ${current.guestName} no quarto ${current.room}.`);
     } catch (error) {
       pushLog(error instanceof Error ? error.message : 'Falha ao registrar check-in.');
+    } finally {
+      setProcessingStayId(null);
     }
   }
 
   async function handleCheckOut(stayId: string) {
+    if (processingStayId) {
+      return;
+    }
+
     const current = stays.find((stay) => stay.id === stayId);
     if (!current || current.status !== 'checked_in') {
       return;
@@ -274,6 +288,7 @@ export default function CheckPage() {
       return;
     }
 
+    setProcessingStayId(stayId);
     try {
       const response = await fetch(`/api/tenant/reservations/${stayId}/check-out`, { method: 'POST' });
       const payload = (await response.json()) as { reservation?: { checkedOutAt?: string }; message?: string };
@@ -287,6 +302,8 @@ export default function CheckPage() {
       pushLog(`Checkout finalizado para ${current.guestName} no quarto ${current.room}.`);
     } catch (error) {
       pushLog(error instanceof Error ? error.message : 'Falha ao registrar check-out.');
+    } finally {
+      setProcessingStayId(null);
     }
   }
 
@@ -405,7 +422,7 @@ export default function CheckPage() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              disabled={!canCheckInToday(stay)}
+                              disabled={!canCheckInToday(stay) || processingStayId !== null}
                               onClick={() => handleCheckIn(stay.id)}
                               className="inline-flex items-center gap-1 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 disabled:cursor-not-allowed disabled:opacity-35"
                             >
@@ -413,7 +430,7 @@ export default function CheckPage() {
                             </button>
                             <button
                               type="button"
-                              disabled={!canCheckOutToday(stay)}
+                              disabled={!canCheckOutToday(stay) || processingStayId !== null}
                               onClick={() => handleCheckOut(stay.id)}
                               className="inline-flex items-center gap-1 rounded-xl border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-200 disabled:cursor-not-allowed disabled:opacity-35"
                             >
@@ -465,8 +482,8 @@ export default function CheckPage() {
             <div className="mt-4 space-y-2 text-sm text-slate-300">
               {logs.length ? (
                 logs.map((log) => (
-                  <p key={log} className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2">
-                    {log}
+                  <p key={log.id} className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2">
+                    {log.text}
                   </p>
                 ))
               ) : (

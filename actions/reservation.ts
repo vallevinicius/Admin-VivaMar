@@ -251,7 +251,10 @@ export async function createManualReservationAction(input: ManualReservationInpu
   return createReservationWithRules({
     ...input,
     tenantId: session.tenantId,
-    createdByUserId: session.userId ?? null,
+    // O usuário demo tem userId negativo (-1) só para não colidir com
+    // colaboradores reais na sessão — mas created_by_user_id é UNSIGNED no
+    // banco, então gravar -1 direto quebra o INSERT ("Out of range value").
+    createdByUserId: session.userId > 0 ? session.userId : null,
   });
 }
 

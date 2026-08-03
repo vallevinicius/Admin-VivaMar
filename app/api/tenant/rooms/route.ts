@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 import { getRooms } from "@/services/tenantService";
+import { toPublicUploadUrl } from "@/lib/uploads";
 import { parseRoomPolicyArray, parseMaybeNumber, type RoomClosurePeriod, type RoomSeasonalRate } from "@/lib/room-policies";
+import { BED_TYPES, type BedType, type RoomBed } from "@/types/domain";
 
 function sanitizeStringArray(input: unknown) {
   if (!Array.isArray(input)) {
@@ -84,6 +86,19 @@ function sanitizeClosurePeriods(input: unknown): RoomClosurePeriod[] {
   });
 }
 
+function sanitizeBeds(input: unknown): RoomBed[] {
+  return parseRoomPolicyArray(input, (item) => {
+    const type = String(item.type ?? "").trim() as BedType;
+    const quantity = Number(item.quantity);
+
+    if (!BED_TYPES.includes(type) || !Number.isInteger(quantity) || quantity < 1) {
+      return null;
+    }
+
+    return { type, quantity };
+  });
+}
+
 export async function GET() {
   try {
     const session = await getVerifiedTenantSession();
@@ -135,6 +150,7 @@ export async function POST(request: Request) {
     const photoUrls = sanitizeStringArray(body.photoUrls);
     const seasonalRates = sanitizeSeasonalRates(body.seasonalRates);
     const closurePeriods = sanitizeClosurePeriods(body.closurePeriods);
+    const beds = sanitizeBeds(body.beds);
 
     if (!name) {
       return NextResponse.json({ error: "Nome do quarto é obrigatório" }, { status: 400 });
@@ -182,6 +198,7 @@ export async function POST(request: Request) {
       photoUrls: photoUrls.length > 0 ? JSON.stringify(photoUrls) : null,
       seasonalRates: seasonalRates.length > 0 ? JSON.stringify(seasonalRates) : null,
       closurePeriods: closurePeriods.length > 0 ? JSON.stringify(closurePeriods) : null,
+      beds: beds.length > 0 ? JSON.stringify(beds) : null,
     });
 
     return NextResponse.json(
@@ -196,9 +213,10 @@ export async function POST(request: Request) {
         minStayDays: room.minStayDays,
         quantity: room.quantity,
         amenities: amenities,
-        photoUrls,
+        photoUrls: photoUrls.map(toPublicUploadUrl),
         seasonalRates,
         closurePeriods,
+        beds,
       },
       { status: 201 },
     );

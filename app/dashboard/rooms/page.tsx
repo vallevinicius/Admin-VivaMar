@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { formatCurrencyInput, parseCurrencyInput } from '@/lib/utils';
 import type { RoomClosurePeriod, RoomSeasonalRate } from '@/lib/room-policies';
+import { BED_TYPES, BED_TYPE_LABELS, type BedType, type RoomBed } from '@/types/domain';
 
 type RoomOperationalStatus = 'vacant' | 'cleaning' | 'awaiting_guest' | 'maintenance' | 'occupied';
 
@@ -29,6 +30,7 @@ type RoomData = {
   minStayDays?: number | null;
   seasonalRates?: RoomSeasonalRate[];
   closurePeriods?: RoomClosurePeriod[];
+  beds?: RoomBed[];
   quantity: number;
   maxGuests: number;
   status: 'active' | 'maintenance';
@@ -123,6 +125,7 @@ export default function RoomsPage() {
     customAmenities: '',
     seasonalRatesJson: '[]',
     closurePeriodsJson: '[]',
+    beds: [] as RoomBed[],
     photoFiles: [] as File[],
   });
   const [editRoom, setEditRoom] = useState({
@@ -136,6 +139,7 @@ export default function RoomsPage() {
     customAmenities: '',
     seasonalRatesJson: '[]',
     closurePeriodsJson: '[]',
+    beds: [] as RoomBed[],
     existingPhotoUrls: [] as string[],
     newPhotoFiles: [] as File[],
   });
@@ -167,6 +171,14 @@ export default function RoomsPage() {
   const PRESET_AMENITIES_MAP = new Map(
     PRESET_AMENITIES.map((amenity) => [normalizeAmenity(amenity), amenity]),
   );
+
+  const getBedQuantity = (beds: RoomBed[], type: BedType) =>
+    beds.find((bed) => bed.type === type)?.quantity ?? 0;
+
+  const setBedQuantity = (beds: RoomBed[], type: BedType, quantity: number): RoomBed[] => {
+    const withoutType = beds.filter((bed) => bed.type !== type);
+    return quantity > 0 ? [...withoutType, { type, quantity }] : withoutType;
+  };
 
   const parseStringArray = (input: unknown) => {
     if (Array.isArray(input)) {
@@ -349,6 +361,7 @@ export default function RoomsPage() {
       existingPhotoUrls: parsedPhotoUrls,
       seasonalRatesJson: JSON.stringify(room.seasonalRates ?? [], null, 2),
       closurePeriodsJson: JSON.stringify(room.closurePeriods ?? [], null, 2),
+      beds: Array.isArray(room.beds) ? room.beds : [],
       newPhotoFiles: [],
     });
     setRoomBeingEdited(room.id);
@@ -435,6 +448,7 @@ export default function RoomsPage() {
           photoUrls: [...editRoom.existingPhotoUrls, ...uploadedPhotoUrls],
           seasonalRates,
           closurePeriods,
+          beds: editRoom.beds,
         }),
       });
 
@@ -653,6 +667,7 @@ export default function RoomsPage() {
           photoUrls: uploadedPhotoUrls,
           seasonalRates,
           closurePeriods,
+          beds: newRoom.beds,
         }),
       });
 
@@ -669,6 +684,7 @@ export default function RoomsPage() {
           customAmenities: '',
           seasonalRatesJson: '[]',
           closurePeriodsJson: '[]',
+          beds: [],
           photoFiles: [],
         });
         fetchRooms();
@@ -950,6 +966,11 @@ export default function RoomsPage() {
                     <span className="rounded-full border border-white/10 px-2 py-1">
                       Bloqueios: {room.closurePeriods?.length ?? 0}
                     </span>
+                    {room.beds && room.beds.length > 0 && (
+                      <span className="rounded-full border border-white/10 px-2 py-1">
+                        Camas: {room.beds.map((bed) => `${bed.quantity}x ${BED_TYPE_LABELS[bed.type]}`).join(', ')}
+                      </span>
+                    )}
                   </div>
                   </div>
                 </div>
@@ -1149,6 +1170,50 @@ export default function RoomsPage() {
                     className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                   />
                 </label>
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-slate-200">Camas</span>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {BED_TYPES.map((bedType) => {
+                      const quantity = getBedQuantity(newRoom.beds, bedType);
+                      return (
+                        <div
+                          key={bedType}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-2.5"
+                        >
+                          <span className="text-sm text-slate-200">{BED_TYPE_LABELS[bedType]}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewRoom({
+                                  ...newRoom,
+                                  beds: setBedQuantity(newRoom.beds, bedType, Math.max(0, quantity - 1)),
+                                })
+                              }
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                            >
+                              −
+                            </button>
+                            <span className="w-4 text-center text-sm font-semibold text-white">{quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewRoom({
+                                  ...newRoom,
+                                  beds: setBedQuantity(newRoom.beds, bedType, quantity + 1),
+                                })
+                              }
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <span className="text-sm font-medium text-slate-200">
@@ -1437,6 +1502,50 @@ export default function RoomsPage() {
                     className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
                   />
                 </label>
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-slate-200">Camas</span>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {BED_TYPES.map((bedType) => {
+                      const quantity = getBedQuantity(editRoom.beds, bedType);
+                      return (
+                        <div
+                          key={bedType}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-2.5"
+                        >
+                          <span className="text-sm text-slate-200">{BED_TYPE_LABELS[bedType]}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditRoom({
+                                  ...editRoom,
+                                  beds: setBedQuantity(editRoom.beds, bedType, Math.max(0, quantity - 1)),
+                                })
+                              }
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                            >
+                              −
+                            </button>
+                            <span className="w-4 text-center text-sm font-semibold text-white">{quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditRoom({
+                                  ...editRoom,
+                                  beds: setBedQuantity(editRoom.beds, bedType, quantity + 1),
+                                })
+                              }
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <span className="text-sm font-medium text-slate-200">
