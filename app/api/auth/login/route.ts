@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createSessionToken, authConfig, shouldUseSecureCookies } from '@/lib/auth';
 import { resolveDashboardPermissionsForRole, sanitizeDashboardPermissions } from '@/lib/dashboard-access';
 import { getDb } from '@/lib/db';
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit';
 import { DEMO_TENANT_ID, DEMO_TENANT_NAME, DEMO_USER_EMAIL, DEMO_USER_PASSWORD } from '@/services/demoData';
 
 function parseDashboardPermissions(raw: string | null | undefined) {
@@ -19,6 +20,16 @@ function parseDashboardPermissions(raw: string | null | undefined) {
 }
 
 export async function POST(request: Request) {
+  // Limita por IP (contra scanners/bots) e por e-mail (contra um atacante
+  // que distribua tentativas entre vários IPs mirando uma única conta).
+  const ipLimit = checkRateLimit(getClientIp(request), 'login-ip', {
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!ipLimit.allowed) {
+    return rateLimitResponse(ipLimit.retryAfterSeconds);
+  }
+
   const body = (await request.json()) as { email?: string; password?: string };
   const secureCookie = shouldUseSecureCookies(request);
 
@@ -26,8 +37,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Informe e-mail e senha.' }, { status: 400 });
   }
 
+  const emailLimit = checkRateLimit(body.email.trim().toLowerCase(), 'login-email', {
+    limit: 8,
+    windowMs: 60_000,
+  });
+  if (!emailLimit.allowed) {
+    return rateLimitResponse(emailLimit.retryAfterSeconds);
+  }
 
-  if (body.email === DEMO_USER_EMAIL && body.password === DEMO_USER_PASSWORD) {
+
+  // Login demo só existe fora de produção — nunca deve valer para o tenant
+  // real (DEMO_TENANT_ID coincide com o ID do cliente real "Pousada Viva
+  // Mar" em produção). Gate por variável de servidor (não NEXT_PUBLIC_*,
+  // que só controla se o botão aparece no front, não protege o backend).
+  const demoLoginEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEMO_LOGIN === 'true';
+
+  if (demoLoginEnabled && body.email === DEMO_USER_EMAIL && body.password === DEMO_USER_PASSWORD) {
     const token = await createSessionToken({
       // O usuário demo não é um registro real da tabela users; usar id negativo
       // evita colisão com colaboradores reais e marcação incorreta de "Você".

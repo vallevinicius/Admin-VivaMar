@@ -5,6 +5,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 
 import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
+import { detectImageMimeFromBuffer } from "@/lib/file-signature";
 
 export const runtime = "nodejs";
 
@@ -111,11 +112,22 @@ export async function POST(request: Request) {
         );
       }
 
-      const extension = EXTENSION_BY_MIME[file.type] ?? ".jpg";
+      const buffer = Buffer.from(await file.arrayBuffer());
+
+      // O `file.type` do multipart é só o que o cliente declarou — o tipo
+      // real vem da assinatura de bytes do próprio arquivo.
+      const detectedMime = detectImageMimeFromBuffer(buffer);
+      if (!detectedMime) {
+        return NextResponse.json(
+          { error: `Arquivo ${file.name} não é uma imagem JPG, PNG, WEBP ou GIF válida.` },
+          { status: 400 },
+        );
+      }
+
+      const extension = EXTENSION_BY_MIME[detectedMime];
       const filename = `${Date.now()}-${randomUUID()}${extension}`;
       const filepath = path.join(uploadDir, filename);
 
-      const buffer = Buffer.from(await file.arrayBuffer());
       await writeFile(filepath, buffer);
 
       urls.push(`/uploads/rooms/${roomFolderName}/${filename}`);

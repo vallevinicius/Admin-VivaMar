@@ -85,7 +85,11 @@ export function DashboardSidebar({
   const navLinks = (
     <nav className="mt-5 space-y-3">
       {navItems.map((item) => {
-        const isActive = pathname.startsWith(item.href);
+        // Nunca usar apenas startsWith aqui: "/dashboard/calendar-management"
+        // começa com "/dashboard/calendar", o que marcava os dois itens como
+        // ativos ao mesmo tempo. Só conta como ativo se for o caminho exato
+        // ou uma subrota dele (com "/" na sequência).
+        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = ICONS[item.href] ?? CalendarRange;
 
         return (

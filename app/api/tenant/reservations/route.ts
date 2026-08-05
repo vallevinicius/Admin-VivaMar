@@ -79,6 +79,7 @@ export async function POST(request: Request) {
       guestCpf?: string;
       notes?: string;
       entryType?: 'manual_reservation' | 'blocked';
+      unitNumber?: number;
     };
 
     const entryType = body.entryType ?? 'manual_reservation';
@@ -113,6 +114,7 @@ export async function POST(request: Request) {
       guestPhone: body.guestPhone ?? "",
       guestCpf: body.guestCpf ?? "",
       notes: body.notes ?? "",
+      preferredUnitNumber: body.unitNumber !== undefined ? Number(body.unitNumber) : undefined,
     });
 
     return NextResponse.json({ reservation }, { status: 201 });

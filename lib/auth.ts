@@ -111,12 +111,20 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       return null;
     }
 
+    // Fail-closed: um token assinado sem `role` (ex.: token antigo emitido
+    // antes desse campo existir, ou uma regressão futura na assinatura) não
+    // deve ser tratado como admin por padrão — isso promoveria silenciosamente
+    // qualquer sessão incompleta ao nível de acesso mais alto.
+    if (!payload.role) {
+      return null;
+    }
+
     return {
       userId: payload.userId,
       tenantId: payload.tenantId,
       plan: payload.plan,
       tenantName: payload.tenantName,
-      role: payload.role ?? 'admin',
+      role: payload.role,
       permissions: payload.permissions ?? [],
       active: payload.active ?? true,
       exp: payload.exp,

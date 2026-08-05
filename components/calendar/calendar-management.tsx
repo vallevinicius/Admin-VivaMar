@@ -98,6 +98,7 @@ export function CalendarManagement() {
 
   const [blockStart, setBlockStart] = useState(toDateInputValue(addDays(today, 1)));
   const [blockEnd, setBlockEnd] = useState(toDateInputValue(addDays(today, 2)));
+  const [blockUnit, setBlockUnit] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [priceSpecificDate, setPriceSpecificDate] = useState(toDateInputValue(addDays(today, 1)));
   const [weekRateStart, setWeekRateStart] = useState(toDateInputValue(addDays(today, 1)));
@@ -164,6 +165,7 @@ export function CalendarManagement() {
       setSeasonalRatesDraft(
         Array.isArray(selectedRoom.seasonalRates) ? selectedRoom.seasonalRates : [],
       );
+      setBlockUnit("");
     }
   }, [selectedRoom]);
 
@@ -429,6 +431,7 @@ export function CalendarManagement() {
           guestPhone: "",
           guestCpf: "",
           notes: "Fechamento criado no calendário de gestão",
+          ...(blockUnit ? { unitNumber: Number(blockUnit) } : {}),
         }),
       });
 
@@ -623,6 +626,26 @@ export function CalendarManagement() {
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-rose-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
+
+            {selectedRoom && selectedRoom.quantity > 1 && (
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                  Unidade
+                </span>
+                <select
+                  value={blockUnit}
+                  onChange={(event) => setBlockUnit(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-rose-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  <option value="">Automático (primeira disponível)</option>
+                  {Array.from({ length: selectedRoom.quantity }, (_, index) => index + 1).map((unit) => (
+                    <option key={unit} value={unit}>
+                      Unidade {unit}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
 
           <button

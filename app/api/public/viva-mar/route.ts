@@ -73,6 +73,7 @@ export async function POST(request: Request) {
       guestCpf: body.guestCpf,
       notes: body.notes ?? "",
       couponCode: typeof body.couponCode === "string" ? body.couponCode : undefined,
+      paymentReference: typeof body.paymentReference === "string" ? body.paymentReference : undefined,
       createdByUserId: null,
     });
 

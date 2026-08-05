@@ -179,8 +179,16 @@ export function canAccessDashboardPath(
     return true;
   }
 
+  // Nunca usar apenas startsWith aqui: "/dashboard/calendar-management"
+  // começa com "/dashboard/calendar", então um colaborador com permissão
+  // só para "calendar" conseguiria acessar "calendar-management" (ou
+  // qualquer outra rota cujo prefixo textual coincida) mesmo sem essa
+  // permissão. Só conta como acessível se for o caminho exato ou uma
+  // subrota dele (com "/" na sequência).
   const visible = getVisibleDashboardNavItems(plan, role, permissions);
-  return visible.some((item) => pathname.startsWith(item.href));
+  return visible.some(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+  );
 }
 
 export function getDefaultDashboardHref(

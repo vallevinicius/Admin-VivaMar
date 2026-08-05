@@ -1,6 +1,6 @@
 'use server';
 
-import { Op } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 import { getVerifiedTenantSession, hasFeatureAccess } from '@/lib/tenant-session';
 import { getDb } from '@/lib/db';
 import type { Reservation } from '@/types/domain';
@@ -23,6 +23,10 @@ type ManualReservationInput = {
   guestPhone: string;
   guestCpf?: string;
   notes: string;
+  // Unidade física específica a reservar/fechar (1..quantity). Se omitido,
+  // o sistema atribui automaticamente a primeira unidade livre — usado pelo
+  // fluxo público e pela reserva manual comum, que não precisam expor isso.
+  preferredUnitNumber?: number;
 };
 
 type ReservationCreationContext = ManualReservationInput & {
@@ -32,6 +36,13 @@ type ReservationCreationContext = ManualReservationInput & {
   // servidor (usado pelo fluxo público, onde o `amount` não é confiável).
   recomputePrice?: boolean;
   couponCode?: string;
+  // ID do pagamento (Mercado Pago) que originou esta reserva. Usado para
+  // gerar um channexReservationId determinístico (`mp_<id>`) e aproveitar o
+  // índice único já existente na coluna — se o webhook do MP reenviar a
+  // mesma notificação (retry legítimo, documentado por eles), a segunda
+  // tentativa colide na constraint e devolve a reserva já criada em vez de
+  // duplicar. Ver ensureUniqueIndexes em lib/db.ts.
+  paymentReference?: string;
 };
 
 function parseStoredPolicyArray(input: unknown) {
@@ -77,11 +88,39 @@ function normalizeCpf(input: string | undefined): string | null {
   return digitsOnly;
 }
 
+function mapReservationToDomain(
+  reservation: InstanceType<Awaited<ReturnType<typeof getDb>>['Reservation']>,
+  localRoomId: string,
+): Reservation {
+  return {
+    id: reservation.channexReservationId,
+    roomId: localRoomId,
+    checkIn: formatDbDate(reservation.checkIn),
+    checkOut: formatDbDate(reservation.checkOut),
+    status: reservation.status,
+    otaSource: reservation.otaSource,
+    channelReference: reservation.channelReference,
+    amount: Number(reservation.amount),
+    currency: reservation.currency,
+    customer: {
+      name: reservation.guestName,
+      email: reservation.guestEmail,
+      phone: reservation.guestPhone,
+      cpf: (reservation.guestCpf as string | null) ?? undefined,
+    },
+    notes: reservation.notes,
+  };
+}
+
 async function createReservationWithRules(input: ReservationCreationContext): Promise<Reservation> {
   const { sequelize, Room, Reservation, Coupon } = await getDb();
   const normalizedCpf = normalizeCpf(input.guestCpf);
+  const channexReservationId = input.paymentReference
+    ? `mp_${input.paymentReference}`
+    : `manual_${Date.now()}`;
 
-  return sequelize.transaction(async (transaction) => {
+  try {
+    return await sequelize.transaction(async (transaction) => {
     // Trava a linha do quarto para serializar tentativas concorrentes de reserva
     // do mesmo quarto e evitar overbooking em requisições simultâneas.
     const room = await Room.findOne({
@@ -141,9 +180,27 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
     }
 
     const takenUnits = new Set(overlappingReservations.map((reservation) => reservation.unitNumber ?? 1));
-    let assignedUnit = 1;
-    while (takenUnits.has(assignedUnit) && assignedUnit <= room.quantity) {
-      assignedUnit += 1;
+
+    let assignedUnit: number;
+    if (input.preferredUnitNumber !== undefined) {
+      if (
+        !Number.isInteger(input.preferredUnitNumber) ||
+        input.preferredUnitNumber < 1 ||
+        input.preferredUnitNumber > room.quantity
+      ) {
+        throw new Error(`Unidade inválida. Este quarto tem ${room.quantity} unidade(s).`);
+      }
+
+      if (takenUnits.has(input.preferredUnitNumber)) {
+        throw new Error(`A unidade ${input.preferredUnitNumber} já está ocupada nesse período.`);
+      }
+
+      assignedUnit = input.preferredUnitNumber;
+    } else {
+      assignedUnit = 1;
+      while (takenUnits.has(assignedUnit) && assignedUnit <= room.quantity) {
+        assignedUnit += 1;
+      }
     }
 
     let amount = input.amount;
@@ -181,7 +238,7 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
       {
         roomId: room.id,
         tenantId: input.tenantId,
-        channexReservationId: `manual_${Date.now()}`,
+        channexReservationId,
         otaSource: 'manual',
         checkIn: checkIn.toISOString(),
         checkOut: checkOut.toISOString(),
@@ -200,25 +257,28 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
       { transaction },
     );
 
-    return {
-      id: created.channexReservationId,
-      roomId: room.localRoomId,
-      checkIn: formatDbDate(created.checkIn),
-      checkOut: formatDbDate(created.checkOut),
-      status: created.status,
-      otaSource: created.otaSource,
-      channelReference: created.channelReference,
-      amount: Number(created.amount),
-      currency: created.currency,
-      customer: {
-        name: created.guestName,
-        email: created.guestEmail,
-        phone: created.guestPhone,
-        cpf: (created.guestCpf as string | null) ?? undefined,
-      },
-      notes: created.notes,
-    };
-  });
+      return mapReservationToDomain(created, room.localRoomId);
+    });
+  } catch (error) {
+    // Reenvio legítimo do webhook do Mercado Pago pra um pagamento já
+    // confirmado: a segunda tentativa colide no índice único de
+    // channexReservationId (mp_<paymentId>) — devolve a reserva já criada
+    // em vez de propagar erro (senão o MP ficaria reenviando indefinidamente
+    // e o chamador interpretaria como falha).
+    if (error instanceof UniqueConstraintError && input.paymentReference) {
+      const { Room, Reservation } = await getDb();
+      const existing = await Reservation.findOne({
+        where: { tenantId: input.tenantId, channexReservationId },
+      });
+
+      if (existing) {
+        const room = await Room.findByPk(existing.roomId);
+        return mapReservationToDomain(existing, room?.localRoomId ?? input.roomId);
+      }
+    }
+
+    throw error;
+  }
 }
 
 export async function createManualReservationAction(input: ManualReservationInput): Promise<Reservation> {
