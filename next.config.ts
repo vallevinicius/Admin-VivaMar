@@ -1,32 +1,19 @@
 import type { NextConfig } from "next";
 
-// Painel administrativo não carrega scripts/estilos/fontes externos — tudo
-// é servido pelo próprio Next.js (inclusive fotos de quartos/galeria via
-// /api/uploads, mesma origem). CSP pode ficar restrita a 'self'.
-// Em dev, o webpack do Next usa eval() para hot-reload e um WebSocket local
-// para o HMR — sem liberar isso aqui a CSP quebraria a própria tela de
-// desenvolvimento. Nunca vai para produção (isProd é fixo por build).
-const isProd = process.env.NODE_ENV === "production";
-const csp = [
-  "default-src 'self'",
-  `script-src 'self'${isProd ? "" : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  "img-src 'self' data: blob:",
-  `connect-src 'self'${isProd ? "" : " ws://localhost:* ws://127.0.0.1:*"}`,
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
+// Content-Security-Policy NÃO é definida aqui: o App Router do Next injeta
+// scripts inline sem nonce para hidratar a página (payload de RSC, streaming
+// etc.), então um CSP estático sem 'unsafe-inline' bloqueia a própria
+// hidratação e deixa a tela em branco. A versão correta (com nonce por
+// requisição + 'strict-dynamic') é gerada no middleware.ts, que também é o
+// único lugar que pode ver o nonce antes da resposta ser montada. Duas
+// políticas CSP no mesmo response se combinam pela interseção mais
+// restritiva — então não duplicar o header aqui.
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-  { key: "Content-Security-Policy", value: csp },
 ];
 
 const nextConfig: NextConfig = {

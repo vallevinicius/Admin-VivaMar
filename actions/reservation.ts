@@ -147,20 +147,26 @@ async function createReservationWithRules(input: ReservationCreationContext): Pr
       closurePeriods: parseStoredPolicyArray(room.closurePeriods),
     };
 
-    const minimumStay = getRoomMinimumStay(roomPolicy, checkIn);
     const stayLength = differenceInNights(checkIn, checkOut);
 
-    if (minimumStay.nights > 0 && stayLength < minimumStay.nights) {
-      throw new Error(`Este quarto exige pelo menos ${minimumStay.nights} noites.`);
-    }
+    // Estadia mínima é uma regra comercial para reservas de hóspede — um
+    // fechamento operacional (bloqueio) não "hospeda" ninguém e não deve
+    // ficar preso à mesma exigência de noites/dias mínimos do quarto.
+    if (input.entryType !== 'blocked') {
+      const minimumStay = getRoomMinimumStay(roomPolicy, checkIn);
 
-    if (minimumStay.days > 0 && stayLength < minimumStay.days) {
-      throw new Error(`Este quarto exige pelo menos ${minimumStay.days} dias.`);
-    }
+      if (minimumStay.nights > 0 && stayLength < minimumStay.nights) {
+        throw new Error(`Este quarto exige pelo menos ${minimumStay.nights} noites.`);
+      }
 
-    const blockingClosure = findBlockingClosure(roomPolicy, checkIn, checkOut);
-    if (blockingClosure) {
-      throw new Error('Este quarto está fechado ou bloqueado para o período informado.');
+      if (minimumStay.days > 0 && stayLength < minimumStay.days) {
+        throw new Error(`Este quarto exige pelo menos ${minimumStay.days} dias.`);
+      }
+
+      const blockingClosure = findBlockingClosure(roomPolicy, checkIn, checkOut);
+      if (blockingClosure) {
+        throw new Error('Este quarto está fechado ou bloqueado para o período informado.');
+      }
     }
 
     const overlappingReservations = await Reservation.findAll({

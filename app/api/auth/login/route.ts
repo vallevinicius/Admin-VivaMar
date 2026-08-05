@@ -46,6 +46,38 @@ export async function POST(request: Request) {
   }
 
 
+  // Login de administrador fixo, definido inteiramente por variáveis de
+  // ambiente (sem registro na tabela users) — permite acessar o painel sem
+  // depender de um Tenant/User já cadastrado no banco. Se ADMIN_EMAIL ou
+  // ADMIN_PASSWORD não estiverem configurados, este bloco nunca casa.
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (adminEmail && adminPassword && body.email === adminEmail && body.password === adminPassword) {
+    const token = await createSessionToken({
+      // Mesmo raciocínio do usuário demo: id negativo pra nunca colidir com
+      // um colaborador real da tabela users.
+      userId: -1,
+      tenantId: Number(process.env.ADMIN_TENANT_ID ?? 1),
+      plan: 'premium',
+      tenantName: process.env.ADMIN_TENANT_NAME ?? 'Administração',
+      role: 'admin',
+      permissions: [],
+      active: true,
+    });
+
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(authConfig.cookieName, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: secureCookie,
+      path: '/',
+      maxAge: authConfig.tokenTtlSeconds,
+    });
+
+    return response;
+  }
+
   // Login demo só existe fora de produção — nunca deve valer para o tenant
   // real (DEMO_TENANT_ID coincide com o ID do cliente real "Pousada Viva
   // Mar" em produção). Gate por variável de servidor (não NEXT_PUBLIC_*,

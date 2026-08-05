@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Lock, RefreshCw, Tag, Trash2 } from "lucide-react";
+import { CalendarDays, Lock, LockOpen, RefreshCw, Tag, Trash2 } from "lucide-react";
 import { useToast } from "@/components/toast-provider";
 import { addDays, cn, formatCurrencyInput, parseCurrencyInput } from "@/lib/utils";
 import { getRoomEffectivePrice } from "@/lib/room-policies";
@@ -39,6 +39,11 @@ function overlapsRange(
 
   return reservationStart < endExclusive && reservationEnd > start;
 }
+
+// checkOut é NOT NULL no banco, então "sem data de término" não existe como
+// null — usamos uma data-sentinela bem distante para representar um
+// fechamento indefinido, que o "Reabrir quarto" depois remove por completo.
+const INDEFINITE_CLOSURE_DATE = "2099-12-31";
 
 const WEEK_PRESETS = [
   { label: "Natal", startMonthDay: "12-23", endMonthDay: "12-29", endNextYear: false },
@@ -98,7 +103,9 @@ export function CalendarManagement() {
 
   const [blockStart, setBlockStart] = useState(toDateInputValue(addDays(today, 1)));
   const [blockEnd, setBlockEnd] = useState(toDateInputValue(addDays(today, 2)));
+  const [blockNoEndDate, setBlockNoEndDate] = useState(false);
   const [blockUnit, setBlockUnit] = useState("");
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState("");
   const [priceSpecificDate, setPriceSpecificDate] = useState(toDateInputValue(addDays(today, 1)));
   const [weekRateStart, setWeekRateStart] = useState(toDateInputValue(addDays(today, 1)));
@@ -202,6 +209,22 @@ export function CalendarManagement() {
     [roomReservationsInWindow],
   );
 
+  // Independente da janela do calendário (rangeStart/rangeEnd) — é a lista
+  // de "o que está fechado agora neste quarto", pra reabrir logo ali onde
+  // o fechamento foi criado, sem precisar rolar até a linha do tempo.
+  const activeClosuresForSelectedRoom = useMemo(
+    () =>
+      reservations
+        .filter(
+          (reservation) =>
+            reservation.roomId === selectedRoomId &&
+            reservation.status === "blocked" &&
+            reservation.checkOut.slice(0, 10) >= todayDate,
+        )
+        .sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
+    [reservations, selectedRoomId, todayDate],
+  );
+
   // Mesmo problema do calendário principal: reservas do quarto selecionado
   // que caem fora de [rangeStart, rangeEnd] não aparecem na linha do tempo
   // abaixo, sem nenhum aviso — daí a sensação de "a reserva não foi pro
@@ -224,7 +247,8 @@ export function CalendarManagement() {
     return upcoming[0] ?? roomReservationsOutOfWindow[0] ?? null;
   }, [roomReservationsOutOfWindow, todayDate]);
 
-  const canBlockFuture = blockStart >= todayDate && blockEnd > blockStart;
+  const canBlockFuture =
+    blockStart >= todayDate && (blockNoEndDate || blockEnd > blockStart);
 
   const seasonalRatesSorted = useMemo(
     () =>
@@ -423,7 +447,9 @@ export function CalendarManagement() {
         body: JSON.stringify({
           roomId: selectedRoomId,
           checkIn: new Date(`${blockStart}T14:00:00`).toISOString(),
-          checkOut: new Date(`${blockEnd}T12:00:00`).toISOString(),
+          checkOut: new Date(
+            `${blockNoEndDate ? INDEFINITE_CLOSURE_DATE : blockEnd}T12:00:00`,
+          ).toISOString(),
           entryType: "blocked",
           amount: 0,
           guestName: "Bloqueio Operacional",
@@ -449,6 +475,32 @@ export function CalendarManagement() {
       );
     } finally {
       setSavingBlock(false);
+    }
+  }
+
+  async function handleReopenRoom(reservationId: string) {
+    setReopeningId(reservationId);
+    try {
+      const response = await fetch("/api/tenant/reservations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId }),
+      });
+
+      const payload = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Não foi possível reabrir o quarto.");
+      }
+
+      showToast("Quarto reaberto com sucesso.");
+      await loadData();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Erro ao reabrir o quarto.",
+      );
+    } finally {
+      setReopeningId(null);
     }
   }
 
@@ -623,8 +675,21 @@ export function CalendarManagement() {
                 value={blockEnd}
                 onChange={(event) => setBlockEnd(event.target.value)}
                 min={blockStart || todayDate}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-rose-200 transition focus:ring dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
+                disabled={blockNoEndDate}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-rose-200 transition focus:ring disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-slate-800 dark:text-slate-100"
               />
+            </label>
+
+            <label className="flex items-center gap-2 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={blockNoEndDate}
+                onChange={(event) => setBlockNoEndDate(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-400 dark:border-white/20"
+              />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Fechar por tempo indeterminado (sem data de término)
+              </span>
             </label>
 
             {selectedRoom && selectedRoom.quantity > 1 && (
@@ -660,6 +725,58 @@ export function CalendarManagement() {
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             O fechamento cria um bloqueio operacional e impede novas reservas nesse intervalo.
           </p>
+
+          <div className="mt-5 border-t border-slate-200 pt-4 dark:border-white/10">
+            <div className="mb-3 flex items-center gap-2">
+              <LockOpen className="h-4 w-4 text-emerald-500" />
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                Fechamentos ativos deste quarto
+              </h4>
+            </div>
+
+            {activeClosuresForSelectedRoom.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Nenhum fechamento ativo para este quarto no momento.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeClosuresForSelectedRoom.map((reservation) => {
+                  const isIndefinite =
+                    reservation.checkOut.slice(0, 10) === INDEFINITE_CLOSURE_DATE;
+
+                  return (
+                    <div
+                      key={reservation.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2 dark:border-rose-400/20 dark:bg-rose-500/10"
+                    >
+                      <p className="text-xs text-slate-700 dark:text-slate-200">
+                        <span className="font-semibold">
+                          {parseDateOnly(reservation.checkIn).toLocaleDateString("pt-BR")}
+                          {" até "}
+                          {isIndefinite
+                            ? "sem data de término"
+                            : parseDateOnly(reservation.checkOut).toLocaleDateString("pt-BR")}
+                        </span>
+                        {reservation.unitNumber ? ` • Unidade ${reservation.unitNumber}` : ""}
+                      </p>
+                      <button
+                        onClick={() => void handleReopenRoom(reservation.id)}
+                        disabled={reopeningId === reservation.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20"
+                      >
+                        <LockOpen className="h-3.5 w-3.5" />
+                        {reopeningId === reservation.id ? "Reabrindo..." : "Reabrir quarto"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              Reabrir remove o bloqueio na hora e libera o quarto para novas reservas nesse período.
+            </p>
+          </div>
         </article>
 
         <article className="rounded-3xl border border-slate-200/70 bg-white/80 p-5 shadow-xl shadow-slate-200/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/70 dark:shadow-slate-950/30">
@@ -1051,10 +1168,23 @@ export function CalendarManagement() {
                     {reservation.status === "blocked" ? "Bloqueio" : "Reserva"} • {reservation.customer.name}
                   </p>
                   <span className="text-xs text-slate-600 dark:text-slate-300">
-                    {parseDateOnly(reservation.checkIn).toLocaleDateString("pt-BR")} ate {parseDateOnly(reservation.checkOut).toLocaleDateString("pt-BR")}
+                    {parseDateOnly(reservation.checkIn).toLocaleDateString("pt-BR")} ate{" "}
+                    {reservation.checkOut.slice(0, 10) === INDEFINITE_CLOSURE_DATE
+                      ? "sem data de término"
+                      : parseDateOnly(reservation.checkOut).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{reservation.notes || "Sem observações."}</p>
+                {reservation.status === "blocked" && (
+                  <button
+                    onClick={() => void handleReopenRoom(reservation.id)}
+                    disabled={reopeningId === reservation.id}
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    {reopeningId === reservation.id ? "Reabrindo..." : "Reabrir quarto"}
+                  </button>
+                )}
               </div>
             ))
           )}
