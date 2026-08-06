@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getVerifiedTenantSession, hasFeatureAccess } from '@/lib/tenant-session';
-import { createExpense, deleteExpense } from '@/services/tenantService';
+import { createExpense } from '@/services/tenantService';
 import type { ExpenseCategory } from '@/types/domain';
 
 type ExpenseInput = {
@@ -33,22 +33,6 @@ export async function createExpenseAction(input: ExpenseInput) {
     },
     session.userId,
   );
-
-  revalidatePath('/dashboard/finance');
-}
-
-export async function deleteExpenseAction(expenseId: string) {
-  const session = await getVerifiedTenantSession();
-
-  if (!session) {
-    throw new Error('Sessão inválida.');
-  }
-
-  if (!hasFeatureAccess(session, 'finance')) {
-    throw new Error('Sem permissão para esta ação.');
-  }
-
-  await deleteExpense(session.tenantId, expenseId);
 
   revalidatePath('/dashboard/finance');
 }

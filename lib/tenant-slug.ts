@@ -5,7 +5,7 @@ const COMBINING_DIACRITICS = new RegExp(
   'g',
 );
 
-export function slugify(input: string): string {
+function slugify(input: string): string {
   return input
     .normalize('NFD')
     .replace(COMBINING_DIACRITICS, '')

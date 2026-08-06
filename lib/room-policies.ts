@@ -60,7 +60,7 @@ export function parseMaybeNumber(input: unknown): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-export function toUtcDayKey(value: string | Date): string | null {
+function toUtcDayKey(value: string | Date): string | null {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
     return null;
@@ -131,7 +131,7 @@ function monthDayRangeLength(startMonthDay: string, endMonthDay: string): number
   return end >= start ? end - start : end + 365 - start;
 }
 
-export function findRoomSeasonalRate<T extends { startMonthDay: string; endMonthDay: string }>(
+function findRoomSeasonalRate<T extends { startMonthDay: string; endMonthDay: string }>(
   seasonalRates: T[] | null | undefined,
   checkIn: string | Date,
 ) {

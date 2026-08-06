@@ -30,7 +30,7 @@ export function formatDateLabel(date: Date) {
   }).format(date);
 }
 
-export function extractDigits(value: string) {
+function extractDigits(value: string) {
   return value.replace(/\D/g, '');
 }
 

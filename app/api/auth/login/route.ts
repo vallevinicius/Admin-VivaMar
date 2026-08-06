@@ -4,7 +4,7 @@ import { createSessionToken, authConfig, shouldUseSecureCookies } from '@/lib/au
 import { resolveDashboardPermissionsForRole, sanitizeDashboardPermissions } from '@/lib/dashboard-access';
 import { getDb } from '@/lib/db';
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit';
-import { DEMO_TENANT_ID, DEMO_TENANT_NAME, DEMO_USER_EMAIL, DEMO_USER_PASSWORD } from '@/services/demoData';
+import { resolveDefaultTenantId } from '@/lib/public-tenant';
 
 function parseDashboardPermissions(raw: string | null | undefined) {
   if (!raw) {
@@ -54,44 +54,32 @@ export async function POST(request: Request) {
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (adminEmail && adminPassword && body.email === adminEmail && body.password === adminPassword) {
+    // ADMIN_TENANT_ID é opcional: sem ele, resolve automaticamente o tenant
+    // (hoje só existe a Pousada Viva Mar) em vez de cair num id fixo — um
+    // valor hardcoded aqui já deixou esse login apontando pro tenant errado
+    // (id 1, sem quartos/galeria) enquanto o tenant real tinha outro id.
+    const envTenantId = Number(process.env.ADMIN_TENANT_ID);
+    const tenantId = Number.isInteger(envTenantId) && envTenantId > 0
+      ? envTenantId
+      : await resolveDefaultTenantId();
+
+    if (!tenantId) {
+      return NextResponse.json(
+        { message: 'Nenhum tenant encontrado para o login de administrador.' },
+        { status: 500 },
+      );
+    }
+
+    const { Tenant } = await getDb();
+    const tenant = await Tenant.findByPk(tenantId);
+
     const token = await createSessionToken({
-      // Mesmo raciocínio do usuário demo: id negativo pra nunca colidir com
-      // um colaborador real da tabela users.
+      // Sessão de administrador definida por env, sem registro na tabela
+      // users — id negativo pra nunca colidir com um colaborador real.
       userId: -1,
-      tenantId: Number(process.env.ADMIN_TENANT_ID ?? 1),
-      plan: 'premium',
-      tenantName: process.env.ADMIN_TENANT_NAME ?? 'Administração',
-      role: 'admin',
-      permissions: [],
-      active: true,
-    });
-
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set(authConfig.cookieName, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: secureCookie,
-      path: '/',
-      maxAge: authConfig.tokenTtlSeconds,
-    });
-
-    return response;
-  }
-
-  // Login demo só existe fora de produção — nunca deve valer para o tenant
-  // real (DEMO_TENANT_ID coincide com o ID do cliente real "Pousada Viva
-  // Mar" em produção). Gate por variável de servidor (não NEXT_PUBLIC_*,
-  // que só controla se o botão aparece no front, não protege o backend).
-  const demoLoginEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEMO_LOGIN === 'true';
-
-  if (demoLoginEnabled && body.email === DEMO_USER_EMAIL && body.password === DEMO_USER_PASSWORD) {
-    const token = await createSessionToken({
-      // O usuário demo não é um registro real da tabela users; usar id negativo
-      // evita colisão com colaboradores reais e marcação incorreta de "Você".
-      userId: -1,
-      tenantId: DEMO_TENANT_ID,
-      plan: 'premium',
-      tenantName: DEMO_TENANT_NAME,
+      tenantId,
+      plan: tenant?.plan ?? 'premium',
+      tenantName: tenant?.name ?? process.env.ADMIN_TENANT_NAME ?? 'Administração',
       role: 'admin',
       permissions: [],
       active: true,

@@ -1,9 +1,5 @@
 import { getDb } from "@/lib/db";
 import { toPublicUploadUrl } from "@/lib/uploads";
-import {
-  DEMO_TENANT_ID,
-  getDemoRooms,
-} from "@/services/demoData";
 import { BED_TYPES, type BedType, type Expense, type Reservation, type Room, type RoomBed } from "@/types/domain";
 import { Op } from "sequelize";
 import {
@@ -217,21 +213,9 @@ export async function getRooms(tenantId: number): Promise<Room[]> {
       order: [["name", "ASC"]],
     });
 
-    if (rooms.length > 0) {
-      return rooms.map((room) => mapRoom(room));
-    }
-
-    if (tenantId === DEMO_TENANT_ID) {
-      return getDemoRooms();
-    }
-
-    return [];
+    return rooms.map((room) => mapRoom(room));
   } catch (error) {
     console.error("[tenantService] Falha ao carregar quartos:", error);
-    if (tenantId === DEMO_TENANT_ID) {
-      return getDemoRooms();
-    }
-
     return [];
   }
 }
@@ -547,43 +531,6 @@ export async function deleteExpense(
   if (deletedCount === 0) {
     throw new Error("Despesa não encontrada para este tenant.");
   }
-}
-
-export async function getUnifiedInventory(tenantId: number) {
-  const [roomList, reservationList, expenseList] = await Promise.all([
-    getAvailableRooms(tenantId),
-    getReservations(tenantId),
-    getExpenses(tenantId),
-  ]);
-
-  return {
-    generatedAt: new Date().toISOString(),
-    rooms: roomList,
-    reservations: reservationList,
-    expenses: expenseList,
-  };
-}
-
-export async function updateRoomPrice(
-  tenantId: number,
-  localRoomId: string,
-  newPrice: number,
-) {
-  const { Room } = await getDb();
-
-  const room = await Room.findOne({
-    where: { tenantId, localRoomId },
-  });
-
-  if (!room) {
-    throw new Error("Quarto não encontrado para esta pousada.");
-  }
-
-  await room.update({
-    price: newPrice,
-  });
-
-  return mapRoom(room);
 }
 
 export async function getAvailableRooms(

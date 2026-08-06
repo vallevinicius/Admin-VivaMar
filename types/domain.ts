@@ -1,4 +1,4 @@
-export type { RoomClosurePeriod, RoomSeasonalRate } from '@/lib/room-policies';
+export type { RoomSeasonalRate } from '@/lib/room-policies';
 import type { RoomClosurePeriod, RoomSeasonalRate } from '@/lib/room-policies';
 
 export type OtaSource = 'booking' | 'expedia' | 'hotels_com' | 'manual';

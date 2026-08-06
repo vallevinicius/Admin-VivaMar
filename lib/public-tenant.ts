@@ -1,5 +1,22 @@
 import { getDb } from '@/lib/db';
 
+// Fallback legado para integrações/logins que ainda não informam
+// slug/tenantId: só é seguro enquanto houver um único tenant ativo. Com
+// 2+ pousadas, novas integrações devem sempre passar `?slug=` (rotas
+// públicas) ou um tenantId explícito (login).
+export async function resolveDefaultTenantId(): Promise<number | null> {
+  const { Room } = await getDb();
+  const firstRoom = await Room.findOne({
+    attributes: ['tenantId'],
+    order: [
+      ['tenantId', 'ASC'],
+      ['id', 'ASC'],
+    ],
+  });
+
+  return firstRoom?.tenantId ?? null;
+}
+
 /**
  * Resolve o tenant usado pelas rotas públicas (`/api/public/**`, consumidas
  * pela landing page externa, sem sessão). Centralizado aqui para que
@@ -32,21 +49,5 @@ export async function resolvePublicTenantId(request: Request): Promise<number | 
     return parsedEnv;
   }
 
-  // Fallback legado para integrações existentes que ainda não informam
-  // slug/tenantId: só é seguro enquanto houver um único tenant ativo. Com
-  // 2+ pousadas, novas integrações devem sempre passar `?slug=`.
-  const { Room } = await getDb();
-  const firstRoom = await Room.findOne({
-    attributes: ['tenantId'],
-    order: [
-      ['tenantId', 'ASC'],
-      ['id', 'ASC'],
-    ],
-  });
-
-  if (firstRoom?.tenantId) {
-    return firstRoom.tenantId;
-  }
-
-  return null;
+  return resolveDefaultTenantId();
 }

@@ -32,8 +32,9 @@ export async function getVerifiedTenantSession(): Promise<VerifiedTenantSession 
     return null;
   }
 
-  // O usuário demo não existe na tabela users; seu payload é fixo e não tem
-  // estado (permissões/ativação) que possa ficar obsoleto.
+  // A sessão de administrador definida por env (ADMIN_EMAIL/ADMIN_PASSWORD)
+  // não existe na tabela users; seu payload é fixo e não tem estado
+  // (permissões/ativação) que possa ficar obsoleto.
   if (session.userId < 0) {
     return {
       userId: session.userId,
