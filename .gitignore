@@ -28,3 +28,4 @@ Thumbs.db
 .idea/
 
 /public/uploads
+/uploads-backup-*

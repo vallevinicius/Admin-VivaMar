@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 
 import { getVerifiedTenantSession, hasFeatureAccess } from "@/lib/tenant-session";
 import { detectImageMimeFromBuffer } from "@/lib/file-signature";
+import { compressImage, COMPRESSED_IMAGE_EXTENSION } from "@/lib/image-processing";
 
 export const runtime = "nodejs";
 
@@ -18,14 +19,6 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
-
-const EXTENSION_BY_MIME: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/jpg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-};
 
 function isFileLike(input: FormDataEntryValue): input is File {
   return (
@@ -124,11 +117,14 @@ export async function POST(request: Request) {
         );
       }
 
-      const extension = EXTENSION_BY_MIME[detectedMime];
-      const filename = `${Date.now()}-${randomUUID()}${extension}`;
+      // Fotos de celular chegam com 3-5MB e resolução muito maior do que
+      // qualquer tela vai exibir — redimensiona e recomprime pra WebP antes
+      // de gravar, senão cada foto pesa o disco e o carregamento do site.
+      const compressedBuffer = await compressImage(buffer);
+      const filename = `${Date.now()}-${randomUUID()}${COMPRESSED_IMAGE_EXTENSION}`;
       const filepath = path.join(uploadDir, filename);
 
-      await writeFile(filepath, buffer);
+      await writeFile(filepath, compressedBuffer);
 
       urls.push(`/uploads/rooms/${roomFolderName}/${filename}`);
     }
