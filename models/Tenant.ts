@@ -10,11 +10,12 @@ export type TenantAttributes = {
   document: string | null;
   plan: TenantPlan;
   status: TenantStatus;
+  bookingHotelId: string | null; // Property ID no Booking.com (para integração)
   createdAt?: Date;
   updatedAt?: Date;
 };
 
-export type TenantCreationAttributes = Optional<TenantAttributes, 'id' | 'slug' | 'document' | 'plan' | 'status' | 'createdAt' | 'updatedAt'>;
+export type TenantCreationAttributes = Optional<TenantAttributes, 'id' | 'slug' | 'document' | 'plan' | 'status' | 'bookingHotelId' | 'createdAt' | 'updatedAt'>;
 
 export class Tenant extends Model<TenantAttributes, TenantCreationAttributes> implements TenantAttributes {
   declare id: number;
@@ -23,6 +24,7 @@ export class Tenant extends Model<TenantAttributes, TenantCreationAttributes> im
   declare document: string | null;
   declare plan: TenantPlan;
   declare status: TenantStatus;
+  declare bookingHotelId: string | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -60,6 +62,12 @@ export class Tenant extends Model<TenantAttributes, TenantCreationAttributes> im
           type: DataTypes.ENUM('active', 'suspended'),
           allowNull: false,
           defaultValue: 'active',
+        },
+        bookingHotelId: {
+          type: DataTypes.STRING(20),
+          allowNull: true,
+          field: 'booking_hotel_id',
+          comment: 'Property ID do Booking.com para integração',
         },
       },
       {
