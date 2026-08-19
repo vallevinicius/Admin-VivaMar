@@ -36,6 +36,12 @@ function getSecret() {
   if (!secret) {
     throw new Error('JWT_SECRET não foi configurado.');
   }
+  // ⚠️ CRÍTICO: JWT_SECRET deve ter mínimo 32 caracteres para HMAC-SHA256
+  if (secret.length < 32) {
+    throw new Error(
+      'JWT_SECRET deve ter mínimo 32 caracteres. Atualize em .env ou variáveis de ambiente.'
+    );
+  }
   return secret;
 }
 
